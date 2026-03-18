@@ -5,7 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'main.dart';
 
 // ⚠️ PASTE YOUR GEMINI API KEY HERE
-const String _kGeminiApiKey = 'AIzaSyDS9y0DV_ws-YzU8wQ4ae4i_NrONuXpiLw';
+const String _kGeminiApiKey = 'API_KEY';
 
 const String _kSystemInstruction = '''
 You are the IDEA Lab Assistant at Bharati Vidyapeeth College of Engineering, Pune.
