@@ -1,15 +1,27 @@
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'firebase_options.dart';
 import 'ai_chat_screen.dart'; // Ensure this matches your AI Chat file name
+import 'admin_dashboard.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
+    statusBarColor: Colors.transparent, 
+    statusBarIconBrightness: Brightness.light
   ));
+  
   runApp(const IDEALabApp());
 }
 
@@ -17,148 +29,111 @@ void main() {
 /// GLOBAL STATE MANAGEMENT
 /// ----------------------------------------------------------------------------
 class UserModel {
-  String firstName;
-  String lastName;
-  String email;
-  String phone;
+  String firstName; 
+  String lastName; 
+  String email; 
+  String phone; 
   String college;
-  String course;
-  String year;
-  String department;
-  String idNumber; // PRN
-  String uniqueId; // Generated IDEA Lab ID
+  String course; 
+  String year; 
+  String department; 
+  String idNumber; 
+  String uniqueId; 
+  String? profileImageUrl;
+  int points; // FIX: Points are now natively tracked
 
   UserModel({
-    required this.firstName,
-    required this.lastName,
-    required this.email,
+    required this.firstName, 
+    required this.lastName, 
+    required this.email, 
     required this.phone,
-    required this.college,
-    required this.course,
-    required this.year,
+    required this.college, 
+    required this.course, 
+    required this.year, 
     required this.department,
-    required this.idNumber,
-    required this.uniqueId,
+    required this.idNumber, 
+    required this.uniqueId, 
+    this.profileImageUrl, 
+    this.points = 0,
   });
 }
 
 class TeamMember {
-  String name;
-  String id;
-  TeamMember({required this.name, required this.id});
+  String name; String id;
+  TeamMember({
+    required this.name, 
+    required this.id
+  });
 }
 
 class IssueReportModel {
-  final String machineName;
-  final String description;
-  final DateTime timestamp;
+  final String machineName; 
+  final String description; 
+  final DateTime timestamp; 
+  final String status;
 
   IssueReportModel({
-    required this.machineName,
-    required this.description,
-    required this.timestamp,
+    required this.machineName, 
+    required this.description, 
+    required this.timestamp, 
+    this.status = 'Pending',
   });
 }
 
 class EventModel {
-  final String title;
-  final String date;
-  final String time;
-  final String participants;
-  final String description;
-  final String location;
+  String title; 
+  String date; 
+  String time; 
+  String participants; 
+  String description; 
+  String location;
 
   EventModel({
-    required this.title,
-    required this.date,
-    required this.time,
-    required this.participants,
+    required this.title, 
+    required this.date, 
+    required this.time, 
+    required this.participants, 
     required this.description,
     this.location = "AICTE IDEA Lab, Bharati Vidyapeeth College of Engineering, Pune",
   });
 }
 
 class AchievementModel {
-  final String id;
-  final String title;
-  final String description;
-  final int points;
+  String id; 
+  String title; 
+  String description; 
+  int points; 
   bool isUnlocked;
 
   AchievementModel({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.points,
-    this.isUnlocked = false,
+    required this.id, 
+    required this.title, 
+    required this.description, 
+    required this.points, 
+    this.isUnlocked = false
   });
 }
 
 class AppData {
-  static UserModel currentUser = UserModel(
-    firstName: "Atharav",
-    lastName: "Mahangade",
-    email: "atharavmahangade@gmail.com",
-    phone: "1234567890",
-    college: "BVDU College of Engineering, Pune",
-    course: "B.Tech",
-    year: "TE (Third Year)",
-    department: "Information Technology",
-    idNumber: "102456789",
-    uniqueId: "IDEA-8492",
-  );
+  static late UserModel currentUser;
 
-  static List<ProjectModel> projects = [
-    ProjectModel(
-      id: "1",
-      name: "Drone Frame Prototype",
-      description: "A lightweight quadcopter frame designed for payload delivery with obstacle avoidance.",
-      isOngoing: true,
-      mentors: ["Prof. Sharma"],
-      teamMembers: [TeamMember(name: "Atharav", id: "IDEA-8492"), TeamMember(name: "Rahul", id: "IDEA-1023")],
-    ),
-    ProjectModel(
-      id: "2",
-      name: "Automated Plant Watering System",
-      description: "IoT based weather and soil monitoring system using ESP32 and various environmental sensors.",
-      isOngoing: true,
-      mentors: ["Dr. Kulkarni"],
-      teamMembers: [TeamMember(name: "Priya", id: "IDEA-4512"), TeamMember(name: "Sneha", id: "IDEA-9982")],
-    ),
-  ];
+  // FIX: Total points perfectly mirrors the live database points
+  static int get totalPoints => currentUser.points;
 
-  static List<BookingModel> bookings = [];
-  static List<IssueReportModel> issues = [];
-
-  // IDEA Points & Achievements System
-  static List<AchievementModel> achievements = [
-    AchievementModel(id: 'reg', title: "Account Registered", description: "Awarded when the user completes profile registration.", points: 10, isUnlocked: true),
-    AchievementModel(id: 'proj1', title: "First Project Created", description: "Awarded when the user creates their first project.", points: 20, isUnlocked: true),
-    AchievementModel(id: 'book1', title: "First Machine Booking", description: "Awarded when the user successfully books a machine for the first time.", points: 20, isUnlocked: false),
-    AchievementModel(id: 'proto1', title: "Innovation Starter", description: "Awarded when the user completes their first project prototype.", points: 50, isUnlocked: false),
-    AchievementModel(id: 'book5', title: "5 Machines Booked", description: "Awarded when the user books five machines.", points: 30, isUnlocked: false),
-  ];
-
-  static int get totalPoints {
-    return achievements.where((a) => a.isUnlocked).fold(0, (sum, a) => sum + a.points);
+  // FIX: Achievements dynamically unlock when the student hits the required points!
+  static List<AchievementModel> get achievements {
+    int p = currentUser.points;
+    return [
+      AchievementModel(id: 'reg', title: "Account Registered", description: "Awarded when the user completes profile registration.", points: 10, isUnlocked: p >= 10),
+      AchievementModel(id: 'proj1', title: "First Project Created", description: "Awarded when the user creates their first project.", points: 20, isUnlocked: p >= 30),
+      AchievementModel(id: 'book1', title: "First Machine Booking", description: "Awarded when the user successfully books a machine for the first time.", points: 20, isUnlocked: p >= 50),
+      AchievementModel(id: 'proto1', title: "Innovation Starter", description: "Awarded when the user completes their first project prototype.", points: 50, isUnlocked: p >= 100),
+      AchievementModel(id: 'book5', title: "5 Machines Booked", description: "Awarded when the user books five machines.", points: 30, isUnlocked: p >= 130),
+    ];
   }
 
   static List<AchievementModel> checkNewAchievements() {
     List<AchievementModel> newlyUnlocked = [];
-
-    void evaluate(String id, bool condition) {
-      var ach = achievements.firstWhere((a) => a.id == id);
-      if (condition && !ach.isUnlocked) {
-        ach.isUnlocked = true;
-        newlyUnlocked.add(ach);
-      }
-    }
-
-    evaluate('proj1', projects.isNotEmpty);
-    evaluate('book1', bookings.isNotEmpty);
-    evaluate('book5', bookings.length >= 5);
-    evaluate('proto1', projects.any((p) => !p.isOngoing));
-
     return newlyUnlocked;
   }
 
@@ -167,13 +142,6 @@ class AppData {
     EventModel(title: "Skilling Programs", date: "Multiple Dates", time: "11:00 AM - 05:00 PM", participants: "Students", description: "Hands-on technical training in embedded systems, IoT, PCB design, welding, and 3D printing."),
     EventModel(title: "Bootcamps", date: "Weekend", time: "09:00 AM - 06:00 PM", participants: "Students", description: "Intensive short-term workshops focused on rapid prototyping and project building."),
     EventModel(title: "Ideation Workshops", date: "Friday", time: "02:00 PM - 05:00 PM", participants: "Students", description: "Interactive brainstorming sessions for developing innovative and viable project ideas."),
-    EventModel(title: "Industry Awareness Workshops", date: "Next Month", time: "10:00 AM - 01:00 PM", participants: "Students / Faculty", description: "Seminars bridging the gap between academia and current industry trends and requirements."),
-    EventModel(title: "Student Internships", date: "Summer / Winter", time: "Full Day", participants: "Students", description: "Long-term projects and intensive lab maintenance training for dedicated students."),
-    EventModel(title: "Professional Skilling Programs", date: "To Be Announced", time: "Evening Batches", participants: "Professionals", description: "Upskilling programs designed for industry professionals on modern fabrication tools."),
-    EventModel(title: "School Teachers Awareness Program", date: "Next Week", time: "10:00 AM - 02:00 PM", participants: "School Teachers", description: "Introducing local school teachers to STEM education methodologies and tinkering concepts."),
-    EventModel(title: "School Student Projects", date: "Ongoing", time: "Flexible", participants: "School Students", description: "Mentoring high school students to build and complete science and technology projects."),
-    EventModel(title: "Open Day for School Students", date: "Saturday", time: "10:00 AM - 04:00 PM", participants: "School Students", description: "Guided lab tours featuring live demonstrations of 3D printing, laser cutting, and robotics."),
-    EventModel(title: "Technical Exhibition Participation", date: "Annual", time: "All Day", participants: "IDEA Lab Team", description: "Showcasing the best lab projects and prototypes at state or national level tech expos."),
   ];
 
   static final List<MachineStatusModel> allMachines = [
@@ -211,32 +179,36 @@ class ProjectModel {
 }
 
 class BookingModel {
+  final String id;
   final String machineName;
   final String projectName;
   final String date;
   final String timeSlot;
+  final DateTime createdAt;
 
   BookingModel({
+    required this.id,
     required this.machineName,
     required this.projectName,
     required this.date,
     required this.timeSlot,
+    required this.createdAt,
   });
 }
 
 class MachineStatusModel {
-  final String name;
-  final String status;
-  final String? buttonText;
-  final Color statusColor;
-  final String imagePath;
+  String name; 
+  String status; 
+  String? buttonText; 
+  Color statusColor; 
+  String imagePath;
 
   MachineStatusModel({
-    required this.name,
-    required this.status,
-    this.buttonText,
-    required this.statusColor,
-    required this.imagePath,
+    required this.name, 
+    required this.status, 
+    this.buttonText, 
+    required this.statusColor, 
+    required this.imagePath
   });
 
   String get effectiveButtonText => buttonText ?? status;
@@ -251,18 +223,79 @@ class IDEALabApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color primaryColor = HSLColor.fromAHSL(1.0, 215, 0.85, 0.50).toColor();
-
     return MaterialApp(
       title: 'AICTE IDEA Lab',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primaryColor: primaryColor,
-        scaffoldBackgroundColor: const Color(0xFFF4F7FB),
-        fontFamily: 'Roboto',
-        colorScheme: ColorScheme.fromSeed(seedColor: primaryColor),
-        useMaterial3: true,
+        primaryColor: primaryColor, 
+        scaffoldBackgroundColor: const Color(0xFFF4F7FB), 
+        fontFamily: 'Roboto', 
+        colorScheme: ColorScheme.fromSeed(seedColor: primaryColor), 
+        useMaterial3: true
       ),
-      home: const WelcomeScreen(),
+      home: const AuthWrapper(), // This protects you on refresh
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        
+        if (snapshot.hasData && snapshot.data != null) {
+          return FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance.collection('users').doc(snapshot.data!.uid).get(),
+            builder: (context, userSnapshot) {
+              if (userSnapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              
+              if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                final data = userSnapshot.data!.data() as Map<String, dynamic>;
+                final role = data['role']?.toString().trim().toLowerCase() ?? 'student';
+                final status = data['status']?.toString().trim().toLowerCase() ?? 'pending_approval';
+                
+                if (kIsWeb) {
+                  if (role == 'admin') return const AdminDashboardScreen();
+                  FirebaseAuth.instance.signOut();
+                  return WelcomeScreen(); // FIX: Removed const
+                } else {
+                  if (role == 'admin') {
+                    FirebaseAuth.instance.signOut();
+                    return WelcomeScreen(); // FIX: Removed const
+                  }
+
+                  if (status == 'pending_approval') {
+                    return const ProfileSubmittedScreen();
+                  }
+
+                  AppData.currentUser = UserModel(
+                    firstName: data['firstName'] ?? '', 
+                    lastName: data['lastName'] ?? '', 
+                    email: data['email'] ?? '',
+                    phone: data['phone'] ?? '', 
+                    college: data['college'] ?? '', 
+                    course: data['course'] ?? '',
+                    year: data['year'] ?? '', 
+                    department: data['department'] ?? '', 
+                    idNumber: data['idNumber'] ?? '',
+                    uniqueId: data['uniqueId'] ?? '', 
+                    profileImageUrl: data['profileImageUrl'], 
+                    points: data['points'] ?? 0,
+                  );
+                  return const MainDashboard();
+                }
+              }
+              return WelcomeScreen(); // FIX: Removed const
+            }
+          );
+        }
+        return WelcomeScreen(); // FIX: Removed const
+      }
     );
   }
 }
@@ -272,7 +305,6 @@ class IDEALabApp extends StatelessWidget {
 /// ----------------------------------------------------------------------------
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
-
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
@@ -291,21 +323,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     _floatController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
     _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat(reverse: true);
     _fadeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
-
     _titleFade = CurvedAnimation(parent: _fadeController, curve: const Interval(0.2, 0.6, curve: Curves.easeOut));
     _subtitleFade = CurvedAnimation(parent: _fadeController, curve: const Interval(0.5, 0.8, curve: Curves.easeOut));
     _buttonFade = CurvedAnimation(parent: _fadeController, curve: const Interval(0.7, 1.0, curve: Curves.easeOut));
-
     _fadeController.forward();
   }
 
   @override
-  void dispose() {
-    _floatController.dispose();
-    _pulseController.dispose();
-    _fadeController.dispose();
-    super.dispose();
-  }
+  void dispose() { _floatController.dispose(); _pulseController.dispose(); _fadeController.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -333,59 +358,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
               builder: (context, child) {
                 final floatOffset = Offset(0, 15 * _floatController.value - 7.5);
                 final pulseScale = 1.0 + (_pulseController.value * 0.15);
-
                 return Stack(
                   alignment: Alignment.center,
                   children: [
-                    Transform.scale(
-                      scale: pulseScale,
-                      child: Container(width: 220, height: 220, decoration: BoxDecoration(shape: BoxShape.circle, color: lightPrimaryColor)),
-                    ),
-                    Transform.translate(
-                      offset: floatOffset,
-                      child: TopLogoImage(assetPath: 'assets/imageC.png', size: 180, placeholderLabel: 'C', fallbackTextColor: primaryColor, fallbackBgColor: Colors.transparent),
-                    ),
+                    Transform.scale(scale: pulseScale, child: Container(width: 220, height: 220, decoration: BoxDecoration(shape: BoxShape.circle, color: lightPrimaryColor))),
+                    Transform.translate(offset: floatOffset, child: TopLogoImage(assetPath: 'assets/imageC.png', size: 180, placeholderLabel: 'C', fallbackTextColor: primaryColor, fallbackBgColor: Colors.transparent)),
                   ],
                 );
               },
             ),
             const Spacer(flex: 2),
-            FadeTransition(
-              opacity: _titleFade,
-              child: Column(
-                children: [
-                  Text("AICTE-IDEA Lab", textAlign: TextAlign.center, style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: primaryColor, letterSpacing: 0.5, height: 1.2)),
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text("Bharati Vidyapeeth College Of Engineering, Pune", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey.shade800, height: 1.2)),
-                  ),
-                ],
-              ),
-            ),
+            FadeTransition(opacity: _titleFade, child: Column(children: [Text("AICTE-IDEA Lab", textAlign: TextAlign.center, style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: primaryColor, letterSpacing: 0.5, height: 1.2)), const SizedBox(height: 4), Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Bharati Vidyapeeth College Of Engineering, Pune", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey.shade800, height: 1.2)))])),
             const SizedBox(height: 24),
-            FadeTransition(
-              opacity: _subtitleFade,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Text("Innovate • Build • Experiment\nTurn your ideas into working prototypes.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.grey.shade600, height: 1.5)),
-              ),
-            ),
+            FadeTransition(opacity: _subtitleFade, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 32.0), child: Text("Innovate • Build • Experiment\nTurn your ideas into working prototypes.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.grey.shade600, height: 1.5)))),
             const Spacer(flex: 3),
-            FadeTransition(
-              opacity: _buttonFade,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 48.0),
-                child: AnimatedScaleButton(
-                  text: "Start Innovating",
-                  color: primaryColor,
-                  width: MediaQuery.of(context).size.width * 0.68,
-                  onPressed: () {
-                    Navigator.push(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const LoginScreen(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
-                  },
-                ),
-              ),
-            ),
+            FadeTransition(opacity: _buttonFade, child: Padding(padding: const EdgeInsets.only(bottom: 48.0), child: AnimatedScaleButton(text: "Start Innovating", color: primaryColor, width: MediaQuery.of(context).size.width * 0.68, onPressed: () { Navigator.push(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const LoginScreen(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child))); }))),
           ],
         ),
       ),
@@ -396,8 +383,92 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
 /// ----------------------------------------------------------------------------
 /// LOGIN SCREEN
 /// ----------------------------------------------------------------------------
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter both email and password"), backgroundColor: Colors.redAccent));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        
+        final String role = data['role']?.toString().trim().toLowerCase() ?? 'student';
+        // FIX: Explicitly extract the status variable so the gatekeeper knows what to check
+        final String status = data['status']?.toString().trim().toLowerCase() ?? 'pending_approval';
+
+        if (kIsWeb) {
+          if (role == 'admin') {
+            if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
+          } else {
+            await FirebaseAuth.instance.signOut();
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access Denied: Students must use the Mobile App."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
+          }
+        } else {
+          if (role == 'admin') {
+            await FirebaseAuth.instance.signOut();
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access Denied: Admins must use the Web Dashboard on a PC."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
+          } else {
+            
+            // LOGIN GATEKEEPER. Blocks students who aren't approved yet.
+            if (status == 'pending_approval' || status == 'rejected') {
+              await FirebaseAuth.instance.signOut();
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account not approved yet. Please wait for admin approval."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
+              return;
+            }
+
+            AppData.currentUser = UserModel(
+              firstName: data['firstName'] ?? '', 
+              lastName: data['lastName'] ?? '', 
+              email: data['email'] ?? email,
+              phone: data['phone'] ?? '', 
+              college: data['college'] ?? '', 
+              course: data['course'] ?? '',
+              year: data['year'] ?? '', 
+              department: data['department'] ?? '', 
+              idNumber: data['idNumber'] ?? '',
+              uniqueId: data['uniqueId'] ?? '', 
+              profileImageUrl: data['profileImageUrl'], 
+              points: data['points'] ?? 0,
+            );
+            if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainDashboard()));
+          }
+        }
+      } else {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("User profile not found in database."), backgroundColor: Colors.redAccent));
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? "Login failed"), backgroundColor: Colors.redAccent));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -406,40 +477,77 @@ class LoginScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TopLogoImage(assetPath: 'assets/imageA.png', size: 80, placeholderLabel: 'A', fallbackTextColor: primaryColor, fallbackBgColor: primaryColor.withOpacity(0.1)),
-                  TopLogoImage(assetPath: 'assets/imageB.png', size: 80, placeholderLabel: 'B', fallbackTextColor: primaryColor, fallbackBgColor: primaryColor.withOpacity(0.1)),
-                ],
-              ),
+        child: SingleChildScrollView(
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TopLogoImage(assetPath: 'assets/imageA.png', size: 80, placeholderLabel: 'A', fallbackTextColor: primaryColor, fallbackBgColor: primaryColor.withOpacity(0.1)),
+                      TopLogoImage(assetPath: 'assets/imageB.png', size: 80, placeholderLabel: 'B', fallbackTextColor: primaryColor, fallbackBgColor: primaryColor.withOpacity(0.1)),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Text("Idea Lab", textAlign: TextAlign.center, style: TextStyle(fontSize: 42, fontWeight: FontWeight.w800, color: primaryColor, letterSpacing: 1.0)),
+                const SizedBox(height: 48),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: "Email ID",
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      prefixIcon: Icon(Icons.email_outlined, color: Colors.grey.shade600),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: TextFormField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: "Password",
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      prefixIcon: Icon(Icons.lock_outline_rounded, color: Colors.grey.shade600),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (_isLoading)
+                  const CircularProgressIndicator()
+                else
+                  AnimatedScaleButton(
+                    text: "Login",
+                    color: primaryColor,
+                    width: MediaQuery.of(context).size.width * 0.75,
+                    onPressed: _login,
+                  ),
+                const SizedBox(height: 16),
+                if (!_isLoading)
+                  AnimatedScaleButton(
+                    text: "Register",
+                    color: primaryColor.withOpacity(0.8),
+                    width: MediaQuery.of(context).size.width * 0.75,
+                    onPressed: () {
+                      Navigator.push(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const ProfileCreationScreen(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
+                    },
+                  ),
+                const SizedBox(height: 64),
+              ],
             ),
-            const Spacer(),
-            Text("Idea Lab", textAlign: TextAlign.center, style: TextStyle(fontSize: 42, fontWeight: FontWeight.w800, color: primaryColor, letterSpacing: 1.0)),
-            const Spacer(),
-            AnimatedScaleButton(
-              text: "Login",
-              color: primaryColor,
-              width: MediaQuery.of(context).size.width * 0.75,
-              onPressed: () {
-                Navigator.pushReplacement(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const MainDashboard(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
-              },
-            ),
-            const SizedBox(height: 16),
-            AnimatedScaleButton(
-              text: "Register",
-              color: primaryColor.withOpacity(0.8),
-              width: MediaQuery.of(context).size.width * 0.75,
-              onPressed: () {
-                Navigator.push(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const ProfileCreationScreen(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
-              },
-            ),
-            const SizedBox(height: 64),
-          ],
+          ),
         ),
       ),
     );
@@ -466,12 +574,16 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _idController = TextEditingController();
 
   bool isBVStudent = true;
   bool _isProfilePhotoUploaded = false;
   bool _isDocumentUploaded = false;
+  bool _isLoading = false;
+
+  File? _profileImageFile; 
 
   String? _selectedCollege = "BVDU College of Engineering, Pune";
   String? _selectedCourse;
@@ -482,13 +594,6 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
     "BVDU College of Engineering, Pune",
     "Bharati Vidyapeeth’s College of Engineering for Women, Pune",
     "Bharati Vidyapeeth’s Jawaharlal Nehru Institute of Technology (Polytechnic), Pune",
-    "BVDU College of Architecture, Pune",
-    "BVDU College of Ayurved, Pune",
-    "BVDU College of Nursing, Pune",
-    "BVDU Dental College & Hospital, Pune",
-    "BVDU Homoeopathic Medical College, Pune",
-    "BVDU Medical College, Pune",
-    "Rajiv Gandhi Institute of Information Technology and Biotechnology (RGITBT), Pune",
     "Others",
   ];
 
@@ -496,14 +601,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
 
   final List<String> bvDepartments = [
     "Artificial Intelligence and Machine Learning",
-    "Chemical Engineering",
-    "Civil Engineering",
     "Computer Engineering",
-    "Computer Science & Business Systems",
-    "Computer Science & Engineering (CSE)",
-    "Electrical & Computer Engineering",
-    "Electronics & Communication Engineering",
-    "Electronics & Telecommunication Engineering",
     "Information Technology (IT)",
     "Mechanical Engineering",
     "Robotics & Automation",
@@ -525,9 +623,21 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
     _phoneController.dispose();
     _idController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickProfileImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: source, imageQuality: 70);
+    if (pickedFile != null) {
+      setState(() {
+        _profileImageFile = File(pickedFile.path);
+        _isProfilePhotoUploaded = true;
+      });
+    }
   }
 
   void _showMediaPicker(String title, bool isPdfOnly) {
@@ -540,8 +650,8 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
             children: [
               Padding(padding: const EdgeInsets.all(16.0), child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
               if (!isPdfOnly) ...[
-                ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take a Photo'), onTap: () { Navigator.pop(context); setState(() => _isProfilePhotoUploaded = true); }),
-                ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from Gallery'), onTap: () { Navigator.pop(context); setState(() => _isProfilePhotoUploaded = true); }),
+                ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take a Photo'), onTap: () { Navigator.pop(context); _pickProfileImage(ImageSource.camera); }),
+                ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from Gallery'), onTap: () { Navigator.pop(context); _pickProfileImage(ImageSource.gallery); }),
               ] else ...[
                 ListTile(leading: const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent), title: const Text('Select PDF Document (Max 2MB)'), onTap: () { Navigator.pop(context); setState(() => _isDocumentUploaded = true); }),
               ],
@@ -618,14 +728,17 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
                                 child: Container(
                                   width: 110, height: 110,
                                   decoration: BoxDecoration(shape: BoxShape.circle, color: _isProfilePhotoUploaded ? primaryColor.withOpacity(0.1) : primaryColor.withOpacity(0.02 + (_pulseController.value * 0.05))),
-                                  child: _isProfilePhotoUploaded ? ClipOval(child: Icon(Icons.person, size: 70, color: primaryColor)) : Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.camera_alt_rounded, size: 28, color: primaryColor.withOpacity(0.7))]),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: _isProfilePhotoUploaded && _profileImageFile != null
+                                      ? Image.file(_profileImageFile!, width: 110, height: 110, fit: BoxFit.cover)
+                                      : Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.camera_alt_rounded, size: 28, color: primaryColor.withOpacity(0.7))]),
                                 ),
                               );
                             },
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Text("Upload Profile Photo", style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                        Text("Upload Profile Photo (Optional)", style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 32),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,8 +753,13 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
                           if (value == null || value.trim().isEmpty) return 'This field is required';
                           if (!value.contains('@')) return 'Please enter a valid email address';
                           return null;
-                        },
-                        ),
+                        }),
+                        const SizedBox(height: 16),
+                        _buildTextField("Password", controller: _passwordController, obscureText: true, validator: (value) {
+                          if (value == null || value.trim().isEmpty) return 'Password is required';
+                          if (value.length < 6) return 'Password must be at least 6 characters';
+                          return null;
+                        }),
                         const SizedBox(height: 16),
                         if (isBVStudent)
                           _buildDropdownField(label: "College Name", value: _selectedCollege, items: bvColleges, onChanged: (val) { setState(() { _selectedCollege = val; _selectedCourse = null; _selectedDepartment = null; _selectedYear = null; }); })
@@ -658,13 +776,16 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
                         ),
                         const SizedBox(height: 16),
                         isDefaultBvcoe ? _buildDropdownField(label: "Department", value: _selectedDepartment, items: bvDepartments, onChanged: (val) => setState(() => _selectedDepartment = val)) : _buildTextField("Department"),
-                        if (_selectedDepartment == "Others") ...[
-                          const SizedBox(height: 16),
-                          _buildTextField("Enter Your Branch"),
-                        ],
                         const SizedBox(height: 16),
                         if (isBVStudent) ...[
-                          _buildTextField("PRN Number", controller: _idController, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                          _buildTextField("PRN Number", controller: _idController, keyboardType: TextInputType.number, 
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) return 'This field is required';
+                              if (value.length != 10) return 'PRN must be exactly 10 digits';
+                              return null;
+                            }
+                          ),
                           const SizedBox(height: 16),
                         ],
                         _buildTextField(
@@ -672,44 +793,97 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) return 'This field is required';
-                            if (value.length != 10) return 'Must be exactly 10 digits';
-                            return null;
-                          },
                         ),
                         const SizedBox(height: 24),
                         _buildDocumentUploadArea(isBVStudent ? "Upload College ID (PDF, max 2MB limit)" : "Upload Aadhaar Card (PDF, max 2MB limit)", primaryColor, true),
                         const SizedBox(height: 48),
-                        AnimatedScaleButton(
-                          text: "Create Profile",
-                          color: primaryColor,
-                          width: MediaQuery.of(context).size.width * 0.8,
-                          onPressed: () {
-                            bool isDocsValid = true;
-                            if (!_isProfilePhotoUploaded) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload a Profile Photo'), backgroundColor: Colors.redAccent)); isDocsValid = false; }
-                            else if (!_isDocumentUploaded) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload the required Document'), backgroundColor: Colors.redAccent)); isDocsValid = false; }
 
-                            if (_formKey.currentState!.validate() && isDocsValid) {
-                              String generatedId = "IDEA-${(Random().nextInt(9000) + 1000).toString()}";
+                        if (_isLoading)
+                          const CircularProgressIndicator()
+                        else
+                          AnimatedScaleButton(
+                            text: "Create Profile",
+                            color: primaryColor,
+                            width: MediaQuery.of(context).size.width * 0.8,
+                            onPressed: () async {
+                              bool isDocsValid = true;
+                              if (!_isDocumentUploaded) { 
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload your ID Document'), backgroundColor: Colors.redAccent)); 
+                                isDocsValid = false; 
+                              }
 
-                              AppData.currentUser = UserModel(
-                                firstName: _firstNameController.text.trim(),
-                                lastName: _lastNameController.text.trim(),
-                                email: _emailController.text.trim(),
-                                phone: _phoneController.text.trim(),
-                                college: _selectedCollege ?? "Other College",
-                                course: _selectedCourse ?? "N/A",
-                                year: _selectedYear ?? "N/A",
-                                department: _selectedDepartment ?? "N/A",
-                                idNumber: _idController.text.trim().isNotEmpty ? _idController.text.trim() : "N/A",
-                                uniqueId: generatedId,
-                              );
+                              if (_formKey.currentState!.validate() && isDocsValid) {
+                                setState(() => _isLoading = true);
+                                try {
+                                  UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+                                    email: _emailController.text.trim(),
+                                    password: _passwordController.text.trim(),
+                                  );
 
-                              Navigator.pushReplacement(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const ProfileSubmittedScreen(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
-                            }
-                          },
-                        ),
+                                  String generatedId = "IDEA-${(Random().nextInt(9000) + 1000).toString()}";
+                                  String uid = userCredential.user!.uid;
+
+                                  String? uploadedImageUrl;
+                                  if (_isProfilePhotoUploaded && _profileImageFile != null && !kIsWeb) {
+                                    try {
+                                      final storageRef = FirebaseStorage.instance.ref().child('profile_images/$uid.jpg');
+                                      await storageRef.putFile(_profileImageFile!);
+                                      uploadedImageUrl = await storageRef.getDownloadURL();
+                                    } catch (e) {
+                                      debugPrint("Image upload failed, skipping: $e");
+                                    }
+                                  }
+
+                                  try {
+                                    await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                                      'firstName': _firstNameController.text.trim(),
+                                      'lastName': _lastNameController.text.trim(),
+                                      'email': _emailController.text.trim(),
+                                      'phone': _phoneController.text.trim(),
+                                      'college': _selectedCollege ?? "Other College",
+                                      'course': _selectedCourse ?? "N/A",
+                                      'year': _selectedYear ?? "N/A",
+                                      'department': _selectedDepartment ?? "N/A",
+                                      'idNumber': _idController.text.trim().isNotEmpty ? _idController.text.trim() : "N/A",
+                                      'uniqueId': generatedId,
+                                      'profileImageUrl': uploadedImageUrl,
+                                      'createdAt': FieldValue.serverTimestamp(),
+                                      'status': 'pending_approval',
+                                      'points': 0, // FIX: Adds points for Admin Leaderboard
+                                      'role': 'student'
+                                    });
+
+                                    AppData.currentUser = UserModel(
+                                      firstName: _firstNameController.text.trim(),
+                                      lastName: _lastNameController.text.trim(),
+                                      email: _emailController.text.trim(),
+                                      phone: _phoneController.text.trim(),
+                                      college: _selectedCollege ?? "Other College",
+                                      course: _selectedCourse ?? "N/A",
+                                      year: _selectedYear ?? "N/A",
+                                      department: _selectedDepartment ?? "N/A",
+                                      idNumber: _idController.text.trim().isNotEmpty ? _idController.text.trim() : "N/A",
+                                      uniqueId: generatedId,
+                                      profileImageUrl: uploadedImageUrl,
+                                    );
+
+                                    if (mounted) {
+                                      Navigator.pushReplacement(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const ProfileSubmittedScreen(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
+                                    }
+                                  } catch (dbError) {
+                                    await userCredential.user!.delete();
+                                    throw Exception("Database error. Please try again.");
+                                  }
+                                } on FirebaseAuthException catch (e) {
+                                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? "Registration failed"), backgroundColor: Colors.redAccent));
+                                } catch (e) {
+                                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error saving profile. Try again."), backgroundColor: Colors.redAccent));
+                                } finally {
+                                  if (mounted) setState(() => _isLoading = false);
+                                }
+                              }
+                            },
+                          ),
                         const SizedBox(height: 48),
                       ],
                     ),
@@ -742,9 +916,9 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
     );
   }
 
-  Widget _buildTextField(String label, {TextEditingController? controller, String? initialValue, bool readOnly = false, TextInputType keyboardType = TextInputType.text, String? Function(String?)? validator, List<TextInputFormatter>? inputFormatters}) {
+  Widget _buildTextField(String label, {TextEditingController? controller, String? initialValue, bool readOnly = false, bool obscureText = false, TextInputType keyboardType = TextInputType.text, String? Function(String?)? validator, List<TextInputFormatter>? inputFormatters}) {
     return TextFormField(
-      controller: controller, initialValue: initialValue, readOnly: readOnly, keyboardType: keyboardType,
+      controller: controller, initialValue: initialValue, readOnly: readOnly, keyboardType: keyboardType, obscureText: obscureText,
       validator: validator ?? (value) { if (value == null || value.trim().isEmpty) return 'This field is required'; return null; },
       inputFormatters: inputFormatters, style: TextStyle(color: readOnly ? Colors.grey.shade600 : Colors.black87, fontWeight: FontWeight.w500),
       decoration: InputDecoration(labelText: label, labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14), filled: true, fillColor: readOnly ? Colors.grey.shade100 : Colors.white, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2)), errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.redAccent, width: 2)), focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.redAccent, width: 2))),
@@ -756,7 +930,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
       value: value, isExpanded: true, icon: const Icon(Icons.arrow_drop_down_rounded),
       validator: (val) { if (val == null || val.isEmpty) return 'This field is required'; return null; },
       style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500, fontSize: 14, fontFamily: 'Roboto'),
-      decoration: InputDecoration(labelText: label, labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14), filled: true, fillColor: Colors.white, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2)), errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.redAccent, width: 2)), focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.redAccent, width: 2))),
+      decoration: InputDecoration(labelText: label, labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14), filled: true, fillColor: Colors.white, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Theme.of(context).primaryColor, width: 2))),
       items: items.map((item) => DropdownMenuItem<String>(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(),
       onChanged: onChanged,
     );
@@ -773,14 +947,13 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
           child: Column(
             children: [
               if (_isDocumentUploaded) ...[
-                Container(width: 60, height: 60, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: primaryColor.withOpacity(0.3)), boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 4)]), child: Icon(Icons.picture_as_pdf_rounded, color: primaryColor, size: 30)),
+                Container(width: 60, height: 60, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: primaryColor.withOpacity(0.3))), child: Icon(Icons.picture_as_pdf_rounded, color: primaryColor, size: 30)),
                 const SizedBox(height: 12),
               ] else ...[
                 Icon(Icons.upload_file_rounded, color: primaryColor.withOpacity(0.7), size: 40),
                 const SizedBox(height: 12),
               ],
               Text(title, style: TextStyle(color: _isDocumentUploaded ? primaryColor : Colors.grey.shade700, fontWeight: FontWeight.w600, fontSize: 14)),
-              if (_isDocumentUploaded) Padding(padding: const EdgeInsets.only(top: 6.0), child: Text("Tap to replace", style: TextStyle(fontSize: 12, color: Colors.grey.shade500))),
             ],
           ),
         ),
@@ -842,7 +1015,7 @@ class _ProfileSubmittedScreenState extends State<ProfileSubmittedScreen> with Ti
                   ],
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: 60), // FIX: Pushes the content upwards!
               AnimatedBuilder(
                 animation: _pulseController,
                 builder: (context, child) {
@@ -860,35 +1033,8 @@ class _ProfileSubmittedScreenState extends State<ProfileSubmittedScreen> with Ti
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Text("Your profile has been submitted for verification. You will be able to access the AICTE-IDEA Lab system once the administrator approves your profile.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.grey.shade700, height: 1.5)),
+                child: Text("Your profile has been submitted for verification. Please wait for an Admin to approve your account. This screen will automatically update when approved.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.grey.shade700, height: 1.5))
               ),
-              const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(30), border: Border.all(color: Colors.amber.shade300)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.pending_actions_rounded, color: Colors.amber.shade800, size: 20),
-                    const SizedBox(width: 8),
-                    Flexible(child: Text("Status: Waiting for Admin Approval", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.amber.shade900), overflow: TextOverflow.ellipsis)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              Text("If approval takes too much time, please contact:", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-              const SizedBox(height: 8),
-              Text("Email: admin_idealab@gmail.com\nPhone: +91 1234567890", textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.grey.shade800, height: 1.5)),
-              const Spacer(flex: 2),
-              AnimatedScaleButton(
-                text: "Home Page",
-                color: primaryColor,
-                width: MediaQuery.of(context).size.width * 0.8,
-                onPressed: () {
-                  Navigator.pushReplacement(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const MainDashboard(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
-                },
-              ),
-              const SizedBox(height: 48),
             ],
           ),
         ),
@@ -1063,7 +1209,7 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (context) {
         final String fullName = "${AppData.currentUser.firstName} ${AppData.currentUser.lastName}";
-        final String uniqueIdText = "ID: ${AppData.currentUser.uniqueId}"; // SHOWS ONLY ID, NO COLLEGE
+        final String uniqueIdText = "ID: ${AppData.currentUser.uniqueId}"; 
 
         return Container(
           height: MediaQuery.of(context).size.height * 0.88,
@@ -1147,7 +1293,6 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
 
-    // Shows PRN explicitly on the home screen mini-pass
     final String prnText = AppData.currentUser.idNumber != "N/A" && AppData.currentUser.idNumber.isNotEmpty
         ? "PRN: ${AppData.currentUser.idNumber}"
         : "Phone: ${AppData.currentUser.phone}";
@@ -1160,7 +1305,7 @@ class HomeScreen extends StatelessWidget {
           ClipPath(
             clipper: HeaderClipper(),
             child: Container(
-              height: 250, // Increased height to completely prevent Hello text overflow
+              height: 250, 
               width: double.infinity,
               decoration: BoxDecoration(
                 color: primaryColor,
@@ -1211,7 +1356,14 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     Column(
                       children: [
-                        Container(width: 60, height: 60, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.person, color: Colors.white, size: 40)),
+                        Container(
+                          width: 60, height: 60, 
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                          clipBehavior: Clip.antiAlias,
+                          child: AppData.currentUser.profileImageUrl != null 
+                              ? Image.network(AppData.currentUser.profileImageUrl!, fit: BoxFit.cover)
+                              : const Icon(Icons.person, color: Colors.white, size: 40)
+                        ),
                         const SizedBox(height: 8),
                         Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)), child: const Row(children: [Icon(Icons.check_circle, color: Colors.white, size: 12), SizedBox(width: 4), Text("ID Verified", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))])),
                       ],
@@ -1339,7 +1491,6 @@ class HomeScreen extends StatelessWidget {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => const EventsScreen()));
                 })),
                 const SizedBox(width: 12),
-                // Reverted from Notifications back to My Bookings
                 Expanded(child: _buildInfoCard(Icons.event_available_rounded, "My Bookings", "View Bookings", primaryColor, () {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => const MyBookingsScreen(fromHome: true)));
                 })),
@@ -1388,7 +1539,7 @@ class HomeScreen extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(12), // Reduced padding to completely stop right overflow
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]),
         child: Row(
           children: [
@@ -1419,202 +1570,45 @@ class HomeScreen extends StatelessWidget {
 /// ----------------------------------------------------------------------------
 class EventsScreen extends StatelessWidget {
   const EventsScreen({super.key});
-
-  void _showEventDetailsModal(BuildContext context, EventModel event, Color primaryColor) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.85,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              Text(event.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
-              const SizedBox(height: 24),
-              _buildEventDetailRow(Icons.location_on_rounded, "Location", event.location, primaryColor),
-              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
-              _buildEventDetailRow(Icons.calendar_today_rounded, "Date / Duration", event.date, primaryColor),
-              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
-              _buildEventDetailRow(Icons.access_time_rounded, "Time", event.time, primaryColor),
-              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
-              _buildEventDetailRow(Icons.groups_rounded, "Participants", event.participants, primaryColor),
-              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
-              const Text("Description", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
-              const SizedBox(height: 8),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  child: Text(event.description, style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade100,
-                    foregroundColor: Colors.grey.shade800,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: const Text("Close", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEventDetailRow(IconData icon, String label, String value, Color color) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text(value, style: TextStyle(fontSize: 14, color: Colors.grey.shade800, fontWeight: FontWeight.w500)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
+  
+  @override 
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FB),
-      body: Column(
-        children: [
-          const CustomTabHeader(title: "IDEA Lab Events", showBackButton: true, isMainTab: false),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-            child: Text("Stay updated with upcoming workshops, competitions, and lab activities from the IDEA Lab.", style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.4)),
-          ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              physics: const BouncingScrollPhysics(),
-              itemCount: AppData.labEvents.length,
-              itemBuilder: (context, index) {
-                final event = AppData.labEvents[index];
-                return GestureDetector(
-                  onTap: () => _showEventDetailsModal(context, event, primaryColor),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                              child: Icon(Icons.event_note_rounded, color: primaryColor, size: 24),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(event.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.calendar_today_rounded, size: 12, color: Colors.grey.shade500),
-                                      const SizedBox(width: 4),
-                                      Text(event.date, style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.w500)),
-                                      const SizedBox(width: 12),
-                                      Icon(Icons.groups_rounded, size: 12, color: Colors.grey.shade500),
-                                      const SizedBox(width: 4),
-                                      Expanded(child: Text(event.participants, style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(event.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: Colors.grey.shade500, height: 1.4)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+      body: Column(children: [
+        const CustomTabHeader(title: "IDEA Lab Events", showBackButton: true, isMainTab: false),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('events').orderBy('createdAt', descending: true).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final docs = snapshot.data!.docs;
+              if (docs.isEmpty) return const Center(child: Text("No upcoming events."));
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16), 
+                itemCount: docs.length, 
+                itemBuilder: (context, index) {
+                  var data = docs[index].data() as Map<String, dynamic>;
+                  return Card(
+                    color: Colors.white, margin: const EdgeInsets.only(bottom: 12), 
+                    child: ListTile(
+                      leading: Icon(Icons.event_note, color: primaryColor), 
+                      title: Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)), 
+                      subtitle: Text("${data['date']} • ${data['time']}\n${data['description']}"), 
+                      isThreeLine: true
+                    )
+                  );
+                }
+              );
+            }
+          )
+        )
+      ]),
     );
   }
 }
-
-/// ----------------------------------------------------------------------------
-/// NOTIFICATIONS SCREEN
-/// ----------------------------------------------------------------------------
-class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FB),
-      body: Column(
-        children: [
-          const CustomTabHeader(title: "Notifications", showBackButton: true, isMainTab: false),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.notifications_off_rounded, size: 64, color: Colors.grey.shade300),
-                  const SizedBox(height: 16),
-                  Text("No new notifications", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
-                  const SizedBox(height: 8),
-                  Text("You're all caught up!", style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 
 /// ----------------------------------------------------------------------------
 /// REPORT AN ISSUE SCREEN
@@ -1628,13 +1622,22 @@ class ReportIssueScreen extends StatefulWidget {
 
 class _ReportIssueScreenState extends State<ReportIssueScreen> {
   String? _selectedMachine;
-  late List<String> _machines;
+  late List<String> _machines = [];
   final TextEditingController _descController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _machines = AppData.allMachines.map((m) => m.name).toList();
+    _fetchMachines();
+  }
+
+  Future<void> _fetchMachines() async {
+    final snap = await FirebaseFirestore.instance.collection('machines').get();
+    if(mounted) {
+      setState(() {
+        _machines = snap.docs.map((doc) => (doc.data())['name'] as String).toList();
+      });
+    }
   }
 
   @override
@@ -1651,7 +1654,6 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       backgroundColor: const Color(0xFFF4F7FB),
       body: Column(
         children: [
-          // isMainTab: false = No Logos, reduced padding
           const CustomTabHeader(title: "Report an Issue", showBackButton: true, isMainTab: false),
           Expanded(
             child: SingleChildScrollView(
@@ -1713,7 +1715,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                     text: "Submit Report",
                     color: primaryColor,
                     width: double.infinity,
-                    onPressed: () {
+                    onPressed: () async {
                       if (_selectedMachine == null) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a machine first.'), backgroundColor: Colors.redAccent));
                         return;
@@ -1723,14 +1725,19 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                         return;
                       }
 
-                      AppData.issues.insert(0, IssueReportModel(
-                        machineName: _selectedMachine!,
-                        description: _descController.text.trim(),
-                        timestamp: DateTime.now(),
-                      ));
+                      // FIX: Adds 'Pending' status so it shows up correctly in the Admin Panel
+                      await FirebaseFirestore.instance.collection('issues').add({
+                        'machineName': _selectedMachine!,
+                        'description': _descController.text.trim(),
+                        'timestamp': FieldValue.serverTimestamp(),
+                        'userId': FirebaseAuth.instance.currentUser?.uid,
+                        'status': 'Pending' 
+                      });
 
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Issue reported successfully.'), backgroundColor: Colors.green));
-                      Navigator.pop(context);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Issue reported successfully.'), backgroundColor: Colors.green));
+                        Navigator.pop(context);
+                      }
                     },
                   ),
                 ],
@@ -1763,41 +1770,84 @@ class PreviousGrievancesScreen extends StatelessWidget {
         children: [
           const CustomTabHeader(title: "Previous Grievances", showBackButton: true, isMainTab: false),
           Expanded(
-            child: AppData.issues.isEmpty
-                ? Center(child: Text("No previous grievances found.", style: TextStyle(color: Colors.grey.shade500, fontSize: 16)))
-                : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: AppData.issues.length,
-              itemBuilder: (context, index) {
-                final issue = AppData.issues[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('issues')
+                  .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(child: Text("No previous grievances found.", style: TextStyle(color: Colors.grey.shade500, fontSize: 16)));
+                }
+
+                var issuesList = snapshot.data!.docs.map((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  return IssueReportModel(
+                    machineName: data['machineName'] ?? 'Unknown',
+                    description: data['description'] ?? '',
+                    timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+                    status: data['status'] ?? 'Pending',
+                  );
+                }).toList();
+                
+                issuesList.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+                return ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  itemCount: issuesList.length,
+                  itemBuilder: (context, index) {
+                    final issue = issuesList[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.build_circle_rounded, size: 16, color: primaryColor),
-                              const SizedBox(width: 8),
-                              Text(issue.machineName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey.shade800)),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.build_circle_rounded, size: 16, color: primaryColor),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(issue.machineName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey.shade800))),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(_formatDate(issue.timestamp), style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: issue.status == 'Completed' ? Colors.green.withOpacity(0.1) : (issue.status == 'Processing' ? Colors.blue.withOpacity(0.1) : Colors.orange.withOpacity(0.1)),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: issue.status == 'Completed' ? Colors.green : (issue.status == 'Processing' ? Colors.blue : Colors.orange)),
+                                    ),
+                                    child: Text(issue.status, style: TextStyle(color: issue.status == 'Completed' ? Colors.green : (issue.status == 'Processing' ? Colors.blue : Colors.orange), fontSize: 10, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
-                          Text(_formatDate(issue.timestamp), style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                          const SizedBox(height: 8),
+                          Text(issue.description, style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4)),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(issue.description, style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4)),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -1809,7 +1859,7 @@ class PreviousGrievancesScreen extends StatelessWidget {
 }
 
 /// ----------------------------------------------------------------------------
-/// MY PROJECTS SCREEN (Projects Tab)
+/// MY PROJECTS SCREEN 
 /// ----------------------------------------------------------------------------
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({super.key});
@@ -1829,13 +1879,40 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         children: [
           const CustomTabHeader(title: "My Projects", isMainTab: true),
           Expanded(
-            child: AppData.projects.isEmpty
-                ? const Center(child: Text("No projects found."))
-                : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: AppData.projects.length,
-              itemBuilder: (context, index) {
-                return _buildProjectCard(context, AppData.projects[index], primaryColor);
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('projects')
+                  .where('createdBy', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text("No projects found."));
+                }
+
+                final docs = snapshot.data!.docs;
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var data = docs[index].data() as Map<String, dynamic>;
+                    
+                    ProjectModel project = ProjectModel(
+                      id: docs[index].id,
+                      name: data['name'] ?? '',
+                      description: data['description'] ?? '',
+                      isOngoing: data['isOngoing'] ?? true,
+                      imagePath: data['imagePath'],
+                      mentors: List<String>.from(data['mentors'] ?? []),
+                      teamMembers: (data['teamMembers'] as List<dynamic>? ?? []).map((t) => TeamMember(name: t['name'] ?? '', id: t['id'] ?? '')).toList(),
+                    );
+
+                    return _buildProjectCard(context, project, primaryColor);
+                  },
+                );
               },
             ),
           ),
@@ -1848,7 +1925,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             MaterialPageRoute(builder: (context) => ProjectDetailScreen(
               primaryColor: primaryColor,
               onSave: (newProject) {
-                setState(() => AppData.projects.add(newProject));
               },
             )),
           );
@@ -1869,10 +1945,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             project: project,
             primaryColor: primaryColor,
             onSave: (updatedProject) {
-              setState(() {
-                final index = AppData.projects.indexWhere((p) => p.id == updatedProject.id);
-                if (index != -1) AppData.projects[index] = updatedProject;
-              });
             },
           )),
         );
@@ -1894,9 +1966,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 height: 70,
                 decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                 clipBehavior: Clip.antiAlias,
-                child: project.imagePath != null && project.imagePath != 'uploaded_simulated'
-                    ? Image.asset(project.imagePath!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholderIcon(primaryColor))
-                    : _buildPlaceholderIcon(primaryColor),
+                child: project.imagePath != null && project.imagePath!.startsWith('http')
+                    ? Image.network(project.imagePath!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholderIcon(primaryColor))
+                    : (project.imagePath != null && project.imagePath != 'uploaded_simulated'
+                        ? Image.asset(project.imagePath!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholderIcon(primaryColor))
+                        : _buildPlaceholderIcon(primaryColor)),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1935,7 +2009,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 }
 
 /// ----------------------------------------------------------------------------
-/// PROJECT DETAIL SCREEN (Edit/Create Project)
+/// PROJECT DETAIL SCREEN 
 /// ----------------------------------------------------------------------------
 class TeamMemberEntry {
   TextEditingController nameCtrl = TextEditingController();
@@ -1962,6 +2036,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   late TextEditingController _descController;
   bool _isOngoing = true;
   String? _imagePath;
+  File? _selectedImageFile; 
+  bool _isUploading = false;
 
   List<TextEditingController> _mentorControllers = [];
   List<TeamMemberEntry> _teamEntries = [];
@@ -1996,20 +2072,37 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    setState(() {
-      _imagePath = 'uploaded_simulated';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text("Image successfully attached!"), backgroundColor: widget.primaryColor, duration: const Duration(seconds: 2))
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: source, imageQuality: 70);
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImageFile = File(pickedFile.path);
+        _imagePath = null; 
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Image selected!"), backgroundColor: widget.primaryColor));
+    }
+  }
+
+  void _showImageSourcePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              const Padding(padding: EdgeInsets.all(16.0), child: Text("Upload Project Image", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+              ListTile(leading: Icon(Icons.camera_alt_rounded, color: widget.primaryColor), title: const Text('Take a Photo'), onTap: () { Navigator.pop(context); _pickImage(ImageSource.camera); }),
+              ListTile(leading: Icon(Icons.photo_library_rounded, color: widget.primaryColor), title: const Text('Choose from Gallery'), onTap: () { Navigator.pop(context); _pickImage(ImageSource.gallery); }),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  void _saveProject() {
-    if (_imagePath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Project Image is required"), backgroundColor: Colors.red));
-      return;
-    }
+  Future<void> _saveProject() async {
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Project Name is required"), backgroundColor: Colors.red));
       return;
@@ -2019,10 +2112,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return;
     }
 
-    List<TeamMember> validTeam = [];
+    List<Map<String, String>> validTeam = [];
     for (var entry in _teamEntries) {
       if (entry.nameCtrl.text.trim().isNotEmpty && entry.idCtrl.text.trim().isNotEmpty) {
-        validTeam.add(TeamMember(name: entry.nameCtrl.text.trim(), id: entry.idCtrl.text.trim()));
+        validTeam.add({'name': entry.nameCtrl.text.trim(), 'id': entry.idCtrl.text.trim()});
       }
     }
 
@@ -2031,29 +2124,50 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return;
     }
 
-    final newProject = ProjectModel(
-      id: widget.project?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      name: _nameController.text.trim(),
-      description: _descController.text.trim(),
-      isOngoing: _isOngoing,
-      imagePath: _imagePath,
-      mentors: _mentorControllers.map((c) => c.text.trim()).where((t) => t.isNotEmpty).toList(),
-      teamMembers: validTeam,
-    );
+    setState(() => _isUploading = true);
 
-    widget.onSave(newProject);
+    try {
+      String? finalImageUrl = _imagePath;
+      if (_selectedImageFile != null) {
+        final storageRef = FirebaseStorage.instance.ref().child('project_images/${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await storageRef.putFile(_selectedImageFile!);
+        finalImageUrl = await storageRef.getDownloadURL();
+      }
 
-    // Check Achievements after saving a project
-    final unlocked = AppData.checkNewAchievements();
-    for (var ach in unlocked) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('🏆 Achievement Unlocked: ${ach.title} (+${ach.points} Points)'),
-        backgroundColor: Colors.green.shade700,
-        duration: const Duration(seconds: 3),
-      ));
+      final docRef = FirebaseFirestore.instance.collection('projects').doc(widget.project?.id);
+      
+      await docRef.set({
+        'name': _nameController.text.trim(),
+        'description': _descController.text.trim(),
+        'isOngoing': _isOngoing,
+        'imagePath': finalImageUrl,
+        'mentors': _mentorControllers.map((c) => c.text.trim()).where((t) => t.isNotEmpty).toList(),
+        'teamMembers': validTeam,
+        'createdBy': FirebaseAuth.instance.currentUser?.uid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).update({
+        'points': FieldValue.increment(20)
+      });
+
+      final unlocked = AppData.checkNewAchievements();
+      for (var ach in unlocked) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('🏆 Achievement Unlocked: ${ach.title} (+${ach.points} Points)'),
+            backgroundColor: Colors.green.shade700,
+            duration: const Duration(seconds: 3),
+          ));
+        }
+      }
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error saving project: $e"), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
-
-    Navigator.pop(context);
   }
 
   @override
@@ -2081,31 +2195,23 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: _imagePath == null ? Colors.redAccent.withOpacity(0.5) : Colors.grey.shade300, width: _imagePath == null ? 2 : 1),
+                            border: Border.all(color: (_imagePath == null && _selectedImageFile == null) ? Colors.redAccent.withOpacity(0.5) : Colors.grey.shade300, width: (_imagePath == null && _selectedImageFile == null) ? 2 : 1),
                             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
                           ),
                           clipBehavior: Clip.antiAlias,
-                          child: _imagePath == 'uploaded_simulated'
-                              ? Container(
-                            color: widget.primaryColor.withOpacity(0.1),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.check_circle_rounded, color: widget.primaryColor, size: 50),
-                                const SizedBox(height: 8),
-                                Text("Image Uploaded", style: TextStyle(color: widget.primaryColor, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          )
-                              : _imagePath != null
-                              ? Image.asset(_imagePath!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholder())
-                              : _buildPlaceholder(),
+                          child: _selectedImageFile != null
+                              ? Image.file(_selectedImageFile!, fit: BoxFit.cover)
+                              : (_imagePath != null && _imagePath!.startsWith('http')
+                                  ? Image.network(_imagePath!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholder())
+                                  : (_imagePath != null && _imagePath != 'uploaded_simulated'
+                                      ? Image.asset(_imagePath!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholder())
+                                      : _buildPlaceholder())),
                         ),
                         Positioned(
                           top: -10,
                           right: -10,
                           child: GestureDetector(
-                            onTap: _pickImage,
+                            onTap: _showImageSourcePicker,
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
@@ -2120,11 +2226,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       ],
                     ),
                   ),
-                  if (_imagePath == null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8.0),
-                      child: Center(child: Text("* Project Image is Required", style: TextStyle(color: Colors.redAccent, fontSize: 12))),
-                    ),
                   const SizedBox(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2185,12 +2286,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   const SizedBox(height: 24),
                   _buildDynamicTeamSection("Team Members", _teamEntries),
                   const SizedBox(height: 48),
-                  AnimatedScaleButton(
-                    text: "Save Project",
-                    color: widget.primaryColor,
-                    width: double.infinity,
-                    onPressed: _saveProject,
-                  ),
+                  if (_isUploading)
+                    const Center(child: CircularProgressIndicator())
+                  else
+                    AnimatedScaleButton(
+                      text: "Save Project",
+                      color: widget.primaryColor,
+                      width: double.infinity,
+                      onPressed: _saveProject,
+                    ),
                   const SizedBox(height: 32),
                 ],
               ),
@@ -2311,36 +2415,35 @@ class AllMachineStatusScreen extends StatelessWidget {
         children: [
           const CustomTabHeader(title: "All Machine Status", showBackButton: true, isMainTab: false),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: AppData.allMachines.length,
-              itemBuilder: (context, index) {
-                final machine = AppData.allMachines[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('machines').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final docs = snapshot.data!.docs;
+                return ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(machine.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.grey.shade800))),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: machine.statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: machine.statusColor),
-                        ),
-                        child: Text(machine.status, style: TextStyle(color: machine.statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var data = docs[index].data() as Map<String, dynamic>;
+                    Color sColor = data['status'] == 'Available' ? const Color(0xFF2ECA7F) : const Color(0xFFE74C3C);
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text(data['name'] ?? '', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.grey.shade800))),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(color: sColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: sColor)),
+                            child: Text(data['status'] ?? '', style: TextStyle(color: sColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
-              },
+              }
             ),
           ),
         ],
@@ -2350,7 +2453,7 @@ class AllMachineStatusScreen extends StatelessWidget {
 }
 
 /// ----------------------------------------------------------------------------
-/// MACHINE BOOKING LIST SCREEN (Integrated into Bookings Tab)
+/// MACHINE BOOKING LIST SCREEN 
 /// ----------------------------------------------------------------------------
 class MachineBookingScreen extends StatelessWidget {
   const MachineBookingScreen({super.key});
@@ -2361,20 +2464,9 @@ class MachineBookingScreen extends StatelessWidget {
       builder: (BuildContext context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 28),
-              SizedBox(width: 8),
-              Text("Machine Not Available"),
-            ],
-          ),
+          title: const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 28), SizedBox(width: 8), Text("Machine Not Available")]),
           content: Text("$machineName is currently not available. Please check back later."),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text("OK", style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
-            ),
-          ],
+          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text("OK", style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)))],
         );
       },
     );
@@ -2388,89 +2480,74 @@ class MachineBookingScreen extends StatelessWidget {
         children: [
           const CustomTabHeader(title: "Book a Machine", isMainTab: true),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: AppData.allMachines.length,
-              itemBuilder: (context, index) {
-                final machine = AppData.allMachines[index];
-                return _buildMachineCard(context, machine);
-              },
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('machines').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final docs = snapshot.data!.docs;
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var data = docs[index].data() as Map<String, dynamic>;
+                    bool canBook = data['status'] == "Available";
+                    Color statusColor = canBook ? const Color(0xFF2ECA7F) : const Color(0xFFE74C3C);
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))]),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 80, height: 80,
+                              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
+                              clipBehavior: Clip.antiAlias,
+                              child: Image.asset(data['imagePath'] ?? '', fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Icon(Icons.precision_manufacturing_rounded, color: Colors.grey.shade400, size: 40)),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(data['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  const SizedBox(height: 4),
+                                  Text(data['status'] ?? '', style: TextStyle(color: statusColor, fontWeight: FontWeight.w600, fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                if (canBook) {
+                                  Navigator.push(context, MaterialPageRoute(builder: (context) => BookingDetailScreen(machineName: data['name'])));
+                                } else {
+                                  _showMaintenanceDialog(context, data['name']);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(color: canBook ? statusColor : statusColor.withOpacity(0.8), borderRadius: BorderRadius.circular(6)),
+                                child: Text(canBook ? "Book Now" : "Under Maintenance", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildMachineCard(BuildContext context, MachineStatusModel machine) {
-    bool canBook = machine.status == "Available";
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-              clipBehavior: Clip.antiAlias,
-              child: Image.asset(
-                machine.imagePath,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Icon(Icons.precision_manufacturing_rounded, color: Colors.grey.shade400, size: 40),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(machine.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 4),
-                  Text(machine.status, style: TextStyle(color: machine.statusColor, fontWeight: FontWeight.w600, fontSize: 13)),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                if (canBook) {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => BookingDetailScreen(machineName: machine.name))
-                  );
-                } else {
-                  _showMaintenanceDialog(context, machine.name);
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: canBook ? machine.statusColor : machine.statusColor.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  canBook ? "Book Now" : machine.effectiveButtonText,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 /// ----------------------------------------------------------------------------
-/// BOOKING DETAIL SCREEN (Pick Date, Project, Time Slot)
+/// BOOKING DETAIL SCREEN 
 /// ----------------------------------------------------------------------------
 class BookingDetailScreen extends StatefulWidget {
   final String machineName;
@@ -2490,8 +2567,6 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     "09:00 AM - 10:00 AM", "10:00 AM - 11:00 AM", "11:00 AM - 12:00 PM",
     "12:00 PM - 01:00 PM", "01:00 PM - 02:00 PM", "02:00 PM - 03:00 PM", "03:00 PM - 04:00 PM"
   ];
-
-  final List<bool> available = [false, false, false, true, true, true, true];
 
   String _formatDate(DateTime date) {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -2524,7 +2599,6 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
-    List<String> projectNames = AppData.projects.map((p) => p.name).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FB),
@@ -2560,68 +2634,97 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                   const SizedBox(height: 24),
                   const Text("Choose a Project", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _selectedProject,
-                    isExpanded: true,
-                    hint: const Text("Select Project"),
-                    icon: const Icon(Icons.arrow_drop_down_rounded),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 2)),
-                    ),
-                    items: projectNames.map((name) => DropdownMenuItem<String>(value: name, child: Text(name, overflow: TextOverflow.ellipsis))).toList(),
-                    onChanged: (val) => setState(() => _selectedProject = val),
+                  
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('projects')
+                        .where('createdBy', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      List<String> projectNames = [];
+                      if (snapshot.hasData) {
+                        projectNames = snapshot.data!.docs.map((doc) => (doc.data() as Map<String, dynamic>)['name'] as String).toList();
+                      }
+
+                      return DropdownButtonFormField<String>(
+                        value: _selectedProject,
+                        isExpanded: true,
+                        hint: const Text("Select Project"),
+                        icon: const Icon(Icons.arrow_drop_down_rounded),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 2)),
+                        ),
+                        items: projectNames.map((name) => DropdownMenuItem<String>(value: name, child: Text(name, overflow: TextOverflow.ellipsis))).toList(),
+                        onChanged: (val) => setState(() => _selectedProject = val),
+                      );
+                    },
                   ),
+                  
                   const SizedBox(height: 24),
                   const Text("Choose Time Slot", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const SizedBox(height: 16),
 
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 2.8,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: times.length,
-                    itemBuilder: (context, index) {
-                      bool isAvailable = available[index];
-                      bool isSelected = selectedSlotIndex == index;
+                  // FIX: LIVE BOOKING SLOTS CHECK FIREBASE
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('bookings')
+                        .where('machineName', isEqualTo: widget.machineName)
+                        .where('date', isEqualTo: _formatDate(_selectedDate))
+                        .snapshots(),
+                    builder: (context, bookingSnap) {
+                      List<String> bookedSlots = [];
+                      if (bookingSnap.hasData) {
+                        bookedSlots = bookingSnap.data!.docs.map((doc) => (doc.data() as Map<String, dynamic>)['timeSlot'] as String).toList();
+                      }
 
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: isAvailable ? () {
-                          setState(() {
-                            selectedSlotIndex = index;
-                          });
-                        } : null,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isAvailable ? (isSelected ? primaryColor : Colors.white) : Colors.grey.shade200,
-                            border: Border.all(
-                              color: isAvailable ? (isSelected ? primaryColor : Colors.grey.shade300) : Colors.grey.shade200,
-                              width: isSelected ? 2 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: isAvailable && !isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))] : [],
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            times[index],
-                            style: TextStyle(
-                              color: isAvailable ? (isSelected ? Colors.white : Colors.grey.shade800) : Colors.grey.shade400,
-                              fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            ),
-                          ),
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 2.8,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
                         ),
+                        itemCount: times.length,
+                        itemBuilder: (context, index) {
+                          bool isAvailable = !bookedSlots.contains(times[index]);
+                          bool isSelected = selectedSlotIndex == index;
+
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: isAvailable ? () {
+                              setState(() {
+                                selectedSlotIndex = index;
+                              });
+                            } : null,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isAvailable ? (isSelected ? primaryColor : Colors.white) : Colors.grey.shade200,
+                                border: Border.all(
+                                  color: isAvailable ? (isSelected ? primaryColor : Colors.grey.shade300) : Colors.grey.shade200,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: isAvailable && !isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))] : [],
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                times[index],
+                                style: TextStyle(
+                                  color: isAvailable ? (isSelected ? Colors.white : Colors.grey.shade800) : Colors.grey.shade400,
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  decoration: isAvailable ? TextDecoration.none : TextDecoration.lineThrough,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       );
-                    },
+                    }
                   ),
 
                   const SizedBox(height: 40),
@@ -2645,7 +2748,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                   }
                                 });
                               },
-                              onHorizontalDragEnd: (details) {
+                              onHorizontalDragEnd: (details) async {
                                 if (_dragPosition > MediaQuery.of(context).size.width - 150) {
                                   if (_selectedProject == null) {
                                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a Project first'), backgroundColor: Colors.redAccent));
@@ -2653,35 +2756,40 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                     return;
                                   }
 
-                                  AppData.bookings.add(BookingModel(
-                                    machineName: widget.machineName,
-                                    projectName: _selectedProject!,
-                                    date: _formatDate(_selectedDate),
-                                    timeSlot: times[selectedSlotIndex!],
-                                  ));
+                                  await FirebaseFirestore.instance.collection('bookings').add({
+                                    'machineName': widget.machineName,
+                                    'projectName': _selectedProject,
+                                    'date': _formatDate(_selectedDate),
+                                    'timeSlot': times[selectedSlotIndex!],
+                                    'userId': FirebaseAuth.instance.currentUser?.uid,
+                                    'createdAt': FieldValue.serverTimestamp(),
+                                  });
 
-                                  // Check achievements after booking
                                   final unlocked = AppData.checkNewAchievements();
                                   for (var ach in unlocked) {
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                      content: Text('🏆 Achievement Unlocked: ${ach.title} (+${ach.points} Points)'),
-                                      backgroundColor: Colors.green.shade700,
-                                      duration: const Duration(seconds: 3),
-                                    ));
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                        content: Text('🏆 Achievement Unlocked: ${ach.title} (+${ach.points} Points)'),
+                                        backgroundColor: Colors.green.shade700,
+                                        duration: const Duration(seconds: 3),
+                                      ));
+                                    }
                                   }
 
-                                  Navigator.pushReplacement(
-                                    context,
-                                    PageRouteBuilder(
-                                      pageBuilder: (context, a, sa) => BookingConfirmedScreen(
-                                        machineName: widget.machineName,
-                                        timeSlot: times[selectedSlotIndex!],
-                                        bookingDate: _formatDate(_selectedDate),
-                                        projectName: _selectedProject!,
+                                  if (mounted) {
+                                    Navigator.pushReplacement(
+                                      context,
+                                      PageRouteBuilder(
+                                        pageBuilder: (context, a, sa) => BookingConfirmedScreen(
+                                          machineName: widget.machineName,
+                                          timeSlot: times[selectedSlotIndex!],
+                                          bookingDate: _formatDate(_selectedDate),
+                                          projectName: _selectedProject!,
+                                        ),
+                                        transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child),
                                       ),
-                                      transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child),
-                                    ),
-                                  );
+                                    );
+                                  }
                                 } else {
                                   setState(() => _dragPosition = 0.0);
                                 }
@@ -2825,7 +2933,7 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> with Si
 }
 
 /// ----------------------------------------------------------------------------
-/// VIEW MY BOOKINGS SCREEN
+/// VIEW MY BOOKINGS SCREEN 
 /// ----------------------------------------------------------------------------
 class MyBookingsScreen extends StatelessWidget {
   final bool fromHome;
@@ -2852,39 +2960,55 @@ class MyBookingsScreen extends StatelessWidget {
               }
           ),
           Expanded(
-            child: AppData.bookings.isEmpty
-                ? Center(child: Text("No bookings found.", style: TextStyle(fontSize: 16, color: Colors.grey.shade500)))
-                : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: AppData.bookings.length,
-              itemBuilder: (context, index) {
-                final b = AppData.bookings[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('bookings')
+                  .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(child: Text("No bookings found.", style: TextStyle(fontSize: 16, color: Colors.grey.shade500)));
+                }
+
+                final docs = snapshot.data!.docs;
+
+                return ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var data = docs[index].data() as Map<String, dynamic>;
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.precision_manufacturing_rounded, color: primaryColor),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(b.machineName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                          Row(
+                            children: [
+                              Icon(Icons.precision_manufacturing_rounded, color: primaryColor),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(data['machineName'] ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                            ],
+                          ),
+                          const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
+                          _buildRow("Project:", data['projectName'] ?? ''),
+                          const SizedBox(height: 8),
+                          _buildRow("Date:", data['date'] ?? ''),
+                          const SizedBox(height: 8),
+                          _buildRow("Time:", data['timeSlot'] ?? ''),
                         ],
                       ),
-                      const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
-                      _buildRow("Project:", b.projectName),
-                      const SizedBox(height: 8),
-                      _buildRow("Date:", b.date),
-                      const SizedBox(height: 8),
-                      _buildRow("Time:", b.timeSlot),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -2944,7 +3068,7 @@ class AchievementsScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const Text("Total IDEA Points", style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 4),
-                      Text(AppData.totalPoints.toString(), style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900)),
+                      Text(AppData.currentUser.points.toString(), style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900)),
                     ],
                   ),
                 ),
@@ -3020,7 +3144,7 @@ class AchievementsScreen extends StatelessWidget {
 
 
 /// ----------------------------------------------------------------------------
-/// PROFILE SCREEN
+/// PROFILE SCREEN 
 /// ----------------------------------------------------------------------------
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -3048,6 +3172,33 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     super.dispose();
   }
 
+  Future<void> _pickProfileImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: source, imageQuality: 70);
+    
+    if (pickedFile != null) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Uploading image...')));
+        try {
+          final ref = FirebaseStorage.instance.ref().child('profile_images/${user.uid}.jpg');
+          await ref.putFile(File(pickedFile.path));
+          final url = await ref.getDownloadURL();
+          
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'profileImageUrl': url});
+          
+          setState(() {
+            AppData.currentUser.profileImageUrl = url;
+          });
+          
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated!'), backgroundColor: Colors.green));
+        } catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.redAccent));
+        }
+      }
+    }
+  }
+
   void _showMediaPicker(BuildContext context, Color primaryColor) {
     showModalBottomSheet(
       context: context,
@@ -3065,7 +3216,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   title: const Text('Take a Photo'),
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Camera opened')));
+                    _pickProfileImage(ImageSource.camera);
                   }
               ),
               ListTile(
@@ -3073,7 +3224,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   title: const Text('Choose from Gallery'),
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gallery opened')));
+                    _pickProfileImage(ImageSource.gallery);
                   }
               ),
             ],
@@ -3118,7 +3269,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 Container(
                                   width: 80, height: 80,
                                   decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                                  child: Icon(Icons.person, size: 50, color: primaryColor.withOpacity(0.5)),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: AppData.currentUser.profileImageUrl != null
+                                      ? Image.network(AppData.currentUser.profileImageUrl!, fit: BoxFit.cover, width: 80, height: 80)
+                                      : Icon(Icons.person, size: 50, color: primaryColor.withOpacity(0.5)),
                                 ),
                                 Positioned(
                                   bottom: 0, right: 0,
@@ -3171,15 +3325,31 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
                     Text("IDEA Lab Activity", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: _buildActivityCard("${AppData.projects.length}", "Projects\nCreated", primaryColor)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildActivityCard("${AppData.projects.where((p) => p.isOngoing).length}", "Ongoing\nProjects", primaryColor)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildActivityCard("${AppData.bookings.length}", "Machines\nBooked", primaryColor)),
-                      ],
+                    
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('projects').where('createdBy', isEqualTo: FirebaseAuth.instance.currentUser?.uid).snapshots(),
+                      builder: (context, projectSnap) {
+                        int projCount = projectSnap.data?.docs.length ?? 0;
+                        int ongoingCount = projectSnap.data?.docs.where((d) => (d.data() as Map<String, dynamic>)['isOngoing'] == true).length ?? 0;
+
+                        return StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('bookings').where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid).snapshots(),
+                          builder: (context, bookingSnap) {
+                            int bookCount = bookingSnap.data?.docs.length ?? 0;
+                            return Row(
+                              children: [
+                                Expanded(child: _buildActivityCard("$projCount", "Projects\nCreated", primaryColor)),
+                                const SizedBox(width: 12),
+                                Expanded(child: _buildActivityCard("$ongoingCount", "Ongoing\nProjects", primaryColor)),
+                                const SizedBox(width: 12),
+                                Expanded(child: _buildActivityCard("$bookCount", "Machines\nBooked", primaryColor)),
+                              ],
+                            );
+                          }
+                        );
+                      }
                     ),
+
                     const SizedBox(height: 24),
 
                     Container(
@@ -3219,8 +3389,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     const SizedBox(height: 12),
                     _buildSettingsGroup([
                       _buildSettingsTile(icon: Icons.manage_accounts_outlined, title: "Edit Profile", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfileScreen()))),
-                      _buildSettingsTile(icon: Icons.logout_rounded, title: "Logout", isDestructive: true, onTap: () {
-                        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const WelcomeScreen()), (route) => false);
+                      
+                      _buildSettingsTile(icon: Icons.logout_rounded, title: "Logout", isDestructive: true, onTap: () async {
+                        await FirebaseAuth.instance.signOut();
+                        if (context.mounted) {
+                          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => WelcomeScreen()), (route) => false);
+                        }
                       }),
                     ]),
                     const SizedBox(height: 32),
