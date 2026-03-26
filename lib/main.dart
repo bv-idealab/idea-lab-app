@@ -9,9 +9,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'firebase_options.dart';
-import 'ai_chat_screen.dart'; // Ensure this matches your AI Chat file name
+import 'ai_chat_screen.dart'; 
 import 'admin_dashboard.dart';
 
 void main() async {
@@ -40,7 +40,8 @@ class UserModel {
   String idNumber; 
   String uniqueId; 
   String? profileImageUrl;
-  int points; // FIX: Points are now natively tracked
+  int points;
+  Map<String, dynamic> achievements;
 
   UserModel({
     required this.firstName, 
@@ -55,6 +56,7 @@ class UserModel {
     required this.uniqueId, 
     this.profileImageUrl, 
     this.points = 0,
+    this.achievements = const {},
   });
 }
 
@@ -117,25 +119,20 @@ class AchievementModel {
 class AppData {
   static late UserModel currentUser;
 
-  // FIX: Total points perfectly mirrors the live database points
   static int get totalPoints => currentUser.points;
 
-  // FIX: Achievements dynamically unlock when the student hits the required points!
   static List<AchievementModel> get achievements {
-    int p = currentUser.points;
+    Map<String, dynamic> ach = currentUser.achievements;
     return [
-      AchievementModel(id: 'reg', title: "Account Registered", description: "Awarded when the user completes profile registration.", points: 10, isUnlocked: p >= 10),
-      AchievementModel(id: 'proj1', title: "First Project Created", description: "Awarded when the user creates their first project.", points: 20, isUnlocked: p >= 30),
-      AchievementModel(id: 'book1', title: "First Machine Booking", description: "Awarded when the user successfully books a machine for the first time.", points: 20, isUnlocked: p >= 50),
-      AchievementModel(id: 'proto1', title: "Innovation Starter", description: "Awarded when the user completes their first project prototype.", points: 50, isUnlocked: p >= 100),
-      AchievementModel(id: 'book5', title: "5 Machines Booked", description: "Awarded when the user books five machines.", points: 30, isUnlocked: p >= 130),
+      AchievementModel(id: 'reg', title: "Account Registered", description: "Awarded when your profile is approved.", points: 10, isUnlocked: ach['reg'] == true),
+      AchievementModel(id: 'proj1', title: "First Project Created", description: "Awarded when you create your first project.", points: 20, isUnlocked: ach['proj1'] == true),
+      AchievementModel(id: 'book1', title: "First Machine Booking", description: "Awarded for your first successful booking.", points: 20, isUnlocked: ach['book1'] == true),
+      AchievementModel(id: 'proto1', title: "Innovation Starter", description: "Awarded when you complete your first project.", points: 50, isUnlocked: ach['proto1'] == true),
+      AchievementModel(id: 'book5', title: "5 Machines Booked", description: "Awarded when you book five machines.", points: 30, isUnlocked: ach['book5'] == true),
     ];
   }
 
-  static List<AchievementModel> checkNewAchievements() {
-    List<AchievementModel> newlyUnlocked = [];
-    return newlyUnlocked;
-  }
+  static List<AchievementModel> checkNewAchievements() => [];
 
   static final List<EventModel> labEvents = [
     EventModel(title: "Faculty Development Program (FDP)", date: "Upcoming", time: "10:00 AM - 04:00 PM", participants: "Faculty", description: "Training on advanced lab equipment and pedagogy to enhance practical teaching skills."),
@@ -233,7 +230,7 @@ class IDEALabApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: primaryColor), 
         useMaterial3: true
       ),
-      home: const AuthWrapper(), // This protects you on refresh
+      home: const AuthWrapper(), 
     );
   }
 }
@@ -261,15 +258,13 @@ class AuthWrapper extends StatelessWidget {
                 
                 if (kIsWeb) {
                   if (role == 'admin') return const AdminDashboardScreen();
-                  FirebaseAuth.instance.signOut();
-                  return WelcomeScreen(); // FIX: Removed const
-                } else {
-                  if (role == 'admin') {
+                  
+                  if (defaultTargetPlatform == TargetPlatform.android) {
                     FirebaseAuth.instance.signOut();
-                    return WelcomeScreen(); // FIX: Removed const
+                    return const WelcomeScreen(); 
                   }
 
-                  if (status == 'pending_approval') {
+                  if (status == 'pending_approval' || status == 'rejected') {
                     return const ProfileSubmittedScreen();
                   }
 
@@ -286,15 +281,42 @@ class AuthWrapper extends StatelessWidget {
                     uniqueId: data['uniqueId'] ?? '', 
                     profileImageUrl: data['profileImageUrl'], 
                     points: data['points'] ?? 0,
+                    achievements: data['achievements'] ?? {},
+                  );
+                  return const MainDashboard();
+                } else {
+                  if (role == 'admin') {
+                    FirebaseAuth.instance.signOut();
+                    return const WelcomeScreen(); 
+                  }
+
+                  if (status == 'pending_approval' || status == 'rejected') {
+                    return const ProfileSubmittedScreen();
+                  }
+
+                  AppData.currentUser = UserModel(
+                    firstName: data['firstName'] ?? '', 
+                    lastName: data['lastName'] ?? '', 
+                    email: data['email'] ?? '',
+                    phone: data['phone'] ?? '', 
+                    college: data['college'] ?? '', 
+                    course: data['course'] ?? '',
+                    year: data['year'] ?? '', 
+                    department: data['department'] ?? '', 
+                    idNumber: data['idNumber'] ?? '',
+                    uniqueId: data['uniqueId'] ?? '', 
+                    profileImageUrl: data['profileImageUrl'], 
+                    points: data['points'] ?? 0,
+                    achievements: data['achievements'] ?? {},
                   );
                   return const MainDashboard();
                 }
               }
-              return WelcomeScreen(); // FIX: Removed const
+              return const WelcomeScreen(); 
             }
           );
         }
-        return WelcomeScreen(); // FIX: Removed const
+        return const WelcomeScreen(); 
       }
     );
   }
@@ -395,7 +417,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
-Future<void> _login() async {
+  Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -413,23 +435,18 @@ Future<void> _login() async {
         final data = userDoc.data()!;
         
         final String role = data['role']?.toString().trim().toLowerCase() ?? 'student';
-        // FIX: Explicitly extract the status variable so the gatekeeper knows what to check
         final String status = data['status']?.toString().trim().toLowerCase() ?? 'pending_approval';
 
         if (kIsWeb) {
           if (role == 'admin') {
             if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
           } else {
-            await FirebaseAuth.instance.signOut();
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access Denied: Students must use the Mobile App."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
-          }
-        } else {
-          if (role == 'admin') {
-            await FirebaseAuth.instance.signOut();
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access Denied: Admins must use the Web Dashboard on a PC."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
-          } else {
-            
-            // LOGIN GATEKEEPER. Blocks students who aren't approved yet.
+            if (defaultTargetPlatform == TargetPlatform.android) {
+              await FirebaseAuth.instance.signOut();
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Android users must use the downloaded APK app."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
+              return;
+            }
+
             if (status == 'pending_approval' || status == 'rejected') {
               await FirebaseAuth.instance.signOut();
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account not approved yet. Please wait for admin approval."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
@@ -448,7 +465,36 @@ Future<void> _login() async {
               idNumber: data['idNumber'] ?? '',
               uniqueId: data['uniqueId'] ?? '', 
               profileImageUrl: data['profileImageUrl'], 
-              points: data['points'] ?? 0,
+              points: data['points'] ?? 0, 
+              achievements: data['achievements'] ?? {},
+            );
+            if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainDashboard()));
+          }
+        } else {
+          if (role == 'admin') {
+            await FirebaseAuth.instance.signOut();
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access Denied: Admins must use the Web Dashboard on a PC."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
+          } else {
+            if (status == 'pending_approval' || status == 'rejected') {
+              await FirebaseAuth.instance.signOut();
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account not approved yet. Please wait for admin approval."), backgroundColor: Colors.redAccent, duration: Duration(seconds: 4)));
+              return;
+            }
+
+            AppData.currentUser = UserModel(
+              firstName: data['firstName'] ?? '', 
+              lastName: data['lastName'] ?? '', 
+              email: data['email'] ?? email,
+              phone: data['phone'] ?? '', 
+              college: data['college'] ?? '', 
+              course: data['course'] ?? '',
+              year: data['year'] ?? '', 
+              department: data['department'] ?? '', 
+              idNumber: data['idNumber'] ?? '',
+              uniqueId: data['uniqueId'] ?? '', 
+              profileImageUrl: data['profileImageUrl'], 
+              points: data['points'] ?? 0, 
+              achievements: data['achievements'] ?? {},
             );
             if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainDashboard()));
           }
@@ -599,13 +645,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
 
   final List<String> bvCourses = ["B.Tech", "M.Tech"];
 
-  final List<String> bvDepartments = [
-    "Artificial Intelligence and Machine Learning",
-    "Computer Engineering",
-    "Information Technology (IT)",
-    "Mechanical Engineering",
-    "Robotics & Automation",
-  ];
+  final List<String> bvDepartments = [ "CE", "Chemical", "Civil", "CSBS", "CSE", "CSE AI&ML", "ECE", "ELCE", "ENTC", "IT", "Mech", "Robotics & Automation", ];
 
   @override
   void initState() {
@@ -849,23 +889,10 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
                                       'profileImageUrl': uploadedImageUrl,
                                       'createdAt': FieldValue.serverTimestamp(),
                                       'status': 'pending_approval',
-                                      'points': 0, // FIX: Adds points for Admin Leaderboard
+                                      'points': 0, 
+                                      'achievements': {}, 
                                       'role': 'student'
                                     });
-
-                                    AppData.currentUser = UserModel(
-                                      firstName: _firstNameController.text.trim(),
-                                      lastName: _lastNameController.text.trim(),
-                                      email: _emailController.text.trim(),
-                                      phone: _phoneController.text.trim(),
-                                      college: _selectedCollege ?? "Other College",
-                                      course: _selectedCourse ?? "N/A",
-                                      year: _selectedYear ?? "N/A",
-                                      department: _selectedDepartment ?? "N/A",
-                                      idNumber: _idController.text.trim().isNotEmpty ? _idController.text.trim() : "N/A",
-                                      uniqueId: generatedId,
-                                      profileImageUrl: uploadedImageUrl,
-                                    );
 
                                     if (mounted) {
                                       Navigator.pushReplacement(context, PageRouteBuilder(pageBuilder: (context, a, sa) => const ProfileSubmittedScreen(), transitionsBuilder: (context, a, sa, child) => FadeTransition(opacity: a, child: child)));
@@ -965,77 +992,33 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> with Tick
 /// ----------------------------------------------------------------------------
 /// PROFILE SUBMITTED SCREEN
 /// ----------------------------------------------------------------------------
-class ProfileSubmittedScreen extends StatefulWidget {
+class ProfileSubmittedScreen extends StatelessWidget {
   const ProfileSubmittedScreen({super.key});
-
-  @override
-  State<ProfileSubmittedScreen> createState() => _ProfileSubmittedScreenState();
-}
-
-class _ProfileSubmittedScreenState extends State<ProfileSubmittedScreen> with TickerProviderStateMixin {
-  late AnimationController _fadeController;
-  late AnimationController _pulseController;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(vsync: this, duration: const Duration(seconds: 1));
-    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeIn);
-    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
-    _fadeController.forward();
-  }
-
-  @override
-  void dispose() {
-    _fadeController.dispose();
-    _pulseController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
-    final lightPrimaryColor = HSLColor.fromAHSL(1.0, 215, 0.80, 0.92).toColor();
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TopLogoImage(assetPath: 'assets/imageA.png', size: 60, placeholderLabel: 'A', fallbackTextColor: primaryColor, fallbackBgColor: primaryColor.withOpacity(0.1)),
-                    TopLogoImage(assetPath: 'assets/imageB.png', size: 60, placeholderLabel: 'B', fallbackTextColor: primaryColor, fallbackBgColor: primaryColor.withOpacity(0.1)),
-                  ],
+        child: Padding(
+          padding: const EdgeInsets.only(top: 80.0), 
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 100, height: 100, decoration: BoxDecoration(shape: BoxShape.circle, color: primaryColor), child: const Icon(Icons.check_rounded, color: Colors.white, size: 50)),
+                const SizedBox(height: 48),
+                Text("Profile Submitted", textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: primaryColor, letterSpacing: 0.5)),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: Text("Your profile has been submitted for verification. Please wait for an Admin to approve your account. This screen will automatically update when approved.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.grey.shade700, height: 1.5))
                 ),
-              ),
-              const SizedBox(height: 60), // FIX: Pushes the content upwards!
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Transform.scale(scale: 1.0 + (_pulseController.value * 0.1), child: Container(width: 140, height: 140, decoration: BoxDecoration(shape: BoxShape.circle, color: lightPrimaryColor))),
-                      Container(width: 100, height: 100, decoration: BoxDecoration(shape: BoxShape.circle, color: primaryColor, boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.4), blurRadius: 20, spreadRadius: 5)]), child: const Icon(Icons.check_rounded, color: Colors.white, size: 50)),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 48),
-              Text("Profile Submitted Successfully.", textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: primaryColor, letterSpacing: 0.5)),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Text("Your profile has been submitted for verification. Please wait for an Admin to approve your account. This screen will automatically update when approved.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.grey.shade700, height: 1.5))
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1455,12 +1438,20 @@ class HomeScreen extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      Row(
-                        children: [
-                          _buildStatusRow("3D Printer", "Available", const Color(0xFF2ECA7F)),
-                          const SizedBox(width: 16),
-                          _buildStatusRow("Laser Cutter", "Available", const Color(0xFF2ECA7F)),
-                        ],
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('machines').limit(2).snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) return const SizedBox(height: 20, child: CircularProgressIndicator());
+                          final docs = snapshot.data!.docs;
+                          if (docs.isEmpty) return const Text("No updates.");
+                          return Row(
+                            children: docs.map((doc) {
+                              var data = doc.data() as Map<String, dynamic>;
+                              Color sColor = data['status'] == 'Available' ? const Color(0xFF2ECA7F) : const Color(0xFFE74C3C);
+                              return _buildStatusRow(data['name'] ?? '', data['status'] ?? '', sColor);
+                            }).toList(),
+                          );
+                        }
                       ),
                       const Padding(padding: EdgeInsets.symmetric(vertical: 12.0), child: Divider(height: 1, color: Color(0xFFEEEEEE))),
                       Center(
@@ -1725,7 +1716,6 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                         return;
                       }
 
-                      // FIX: Adds 'Pending' status so it shows up correctly in the Admin Panel
                       await FirebaseFirestore.instance.collection('issues').add({
                         'machineName': _selectedMachine!,
                         'description': _descController.text.trim(),
@@ -1800,6 +1790,8 @@ class PreviousGrievancesScreen extends StatelessWidget {
                   itemCount: issuesList.length,
                   itemBuilder: (context, index) {
                     final issue = issuesList[index];
+                    Color statusColor = issue.status == 'Completed' ? Colors.green : (issue.status == 'Processing' ? Colors.blue : Colors.orange);
+                    
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
@@ -1832,11 +1824,11 @@ class PreviousGrievancesScreen extends StatelessWidget {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: issue.status == 'Completed' ? Colors.green.withOpacity(0.1) : (issue.status == 'Processing' ? Colors.blue.withOpacity(0.1) : Colors.orange.withOpacity(0.1)),
+                                      color: statusColor.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: issue.status == 'Completed' ? Colors.green : (issue.status == 'Processing' ? Colors.blue : Colors.orange)),
+                                      border: Border.all(color: statusColor),
                                     ),
-                                    child: Text(issue.status, style: TextStyle(color: issue.status == 'Completed' ? Colors.green : (issue.status == 'Processing' ? Colors.blue : Colors.orange), fontSize: 10, fontWeight: FontWeight.bold)),
+                                    child: Text(issue.status, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
                                   ),
                                 ],
                               ),
@@ -2147,19 +2139,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      await FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).update({
-        'points': FieldValue.increment(20)
-      });
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      Map<String, dynamic> ach = userDoc.data()?['achievements'] ?? {};
+      int pointsToAdd = 0;
+      
+      if (ach['proj1'] != true) {
+        ach['proj1'] = true;
+        pointsToAdd += 20;
+      }
+      if (!_isOngoing && ach['proto1'] != true) {
+        ach['proto1'] = true;
+        pointsToAdd += 50;
+      }
 
-      final unlocked = AppData.checkNewAchievements();
-      for (var ach in unlocked) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('🏆 Achievement Unlocked: ${ach.title} (+${ach.points} Points)'),
-            backgroundColor: Colors.green.shade700,
-            duration: const Duration(seconds: 3),
-          ));
-        }
+      if (pointsToAdd > 0) {
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'points': FieldValue.increment(pointsToAdd),
+          'achievements': ach
+        });
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('🏆 Achievements Unlocked! +$pointsToAdd Points'), backgroundColor: Colors.green.shade700));
       }
 
       if (mounted) Navigator.pop(context);
@@ -2667,7 +2666,6 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                   const Text("Choose Time Slot", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const SizedBox(height: 16),
 
-                  // FIX: LIVE BOOKING SLOTS CHECK FIREBASE
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance.collection('bookings')
                         .where('machineName', isEqualTo: widget.machineName)
@@ -2756,24 +2754,38 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                     return;
                                   }
 
+                                  final uid = FirebaseAuth.instance.currentUser!.uid;
+
                                   await FirebaseFirestore.instance.collection('bookings').add({
                                     'machineName': widget.machineName,
                                     'projectName': _selectedProject,
                                     'date': _formatDate(_selectedDate),
                                     'timeSlot': times[selectedSlotIndex!],
-                                    'userId': FirebaseAuth.instance.currentUser?.uid,
+                                    'userId': uid,
                                     'createdAt': FieldValue.serverTimestamp(),
                                   });
 
-                                  final unlocked = AppData.checkNewAchievements();
-                                  for (var ach in unlocked) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                        content: Text('🏆 Achievement Unlocked: ${ach.title} (+${ach.points} Points)'),
-                                        backgroundColor: Colors.green.shade700,
-                                        duration: const Duration(seconds: 3),
-                                      ));
-                                    }
+                                  final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+                                  Map<String, dynamic> ach = userDoc.data()?['achievements'] ?? {};
+                                  
+                                  final bookingsSnap = await FirebaseFirestore.instance.collection('bookings').where('userId', isEqualTo: uid).get();
+                                  int totalBookings = bookingsSnap.docs.length;
+
+                                  int pointsToAdd = 0;
+                                  if (totalBookings == 1 && ach['book1'] != true) {
+                                    ach['book1'] = true;
+                                    pointsToAdd += 20;
+                                  }
+                                  if (totalBookings >= 5 && ach['book5'] != true) {
+                                    ach['book5'] = true;
+                                    pointsToAdd += 30;
+                                  }
+
+                                  if (pointsToAdd > 0) {
+                                    await FirebaseFirestore.instance.collection('users').doc(uid).update({
+                                      'points': FieldValue.increment(pointsToAdd),
+                                      'achievements': ach
+                                    });
                                   }
 
                                   if (mounted) {
@@ -3039,6 +3051,7 @@ class AchievementsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FB),
@@ -3046,94 +3059,112 @@ class AchievementsScreen extends StatelessWidget {
         children: [
           const CustomTabHeader(title: "Achievements", showBackButton: true, isMainTab: false),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              physics: const BouncingScrollPhysics(),
-              children: [
-                // Top Summary Card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [primaryColor, HSLColor.fromColor(primaryColor).withLightness(0.4).toColor()],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))],
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.stars_rounded, color: Colors.white, size: 48),
-                      const SizedBox(height: 12),
-                      const Text("Total IDEA Points", style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      Text(AppData.currentUser.points.toString(), style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Text("Your Badges", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.grey.shade800)),
-                const SizedBox(height: 16),
+            child: StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                
+                var userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+                int points = userData['points'] ?? 0;
+                Map<String, dynamic> unlocked = userData['achievements'] ?? {};
 
-                // List of Achievements
-                ...AppData.achievements.map((ach) {
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: ach.isUnlocked ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))] : [],
-                      border: ach.isUnlocked ? null : Border.all(color: Colors.grey.shade200),
+                List<Map<String, dynamic>> allBadges = [
+                  {'id': 'reg', 'title': 'Account Registered', 'desc': 'Awarded when your profile is approved.', 'points': 10, 'isUnlocked': unlocked['reg'] == true},
+                  {'id': 'proj1', 'title': 'First Project Created', 'desc': 'Awarded when you create your first project.', 'points': 20, 'isUnlocked': unlocked['proj1'] == true},
+                  {'id': 'book1', 'title': 'First Machine Booking', 'desc': 'Awarded for your first successful booking.', 'points': 20, 'isUnlocked': unlocked['book1'] == true},
+                  {'id': 'proto1', 'title': 'Innovation Starter', 'desc': 'Awarded when you complete your first project.', 'points': 50, 'isUnlocked': unlocked['proto1'] == true},
+                  {'id': 'book5', 'title': '5 Machines Booked', 'desc': 'Awarded when you book five machines.', 'points': 30, 'isUnlocked': unlocked['book5'] == true},
+                ];
+
+                return ListView(
+                  padding: const EdgeInsets.all(20),
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [primaryColor, HSLColor.fromColor(primaryColor).withLightness(0.4).toColor()],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))],
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.stars_rounded, color: Colors.white, size: 48),
+                          const SizedBox(height: 12),
+                          const Text("Total IDEA Points", style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Text(points.toString(), style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: ach.isUnlocked ? primaryColor.withOpacity(0.1) : Colors.grey.shade100,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                              ach.isUnlocked ? Icons.emoji_events_rounded : Icons.lock_rounded,
-                              color: ach.isUnlocked ? primaryColor : Colors.grey.shade400,
-                              size: 28
-                          ),
+                    const SizedBox(height: 32),
+                    Text("Your Badges", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.grey.shade800)),
+                    const SizedBox(height: 16),
+
+                    ...allBadges.map((ach) {
+                      bool isUnlocked = ach['isUnlocked'];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: isUnlocked ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))] : [],
+                          border: isUnlocked ? null : Border.all(color: Colors.grey.shade200),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(ach.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: ach.isUnlocked ? Colors.grey.shade900 : Colors.grey.shade500)),
-                              const SizedBox(height: 4),
-                              Text(ach.description, style: TextStyle(fontSize: 13, color: ach.isUnlocked ? Colors.grey.shade600 : Colors.grey.shade400, height: 1.4)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: ach.isUnlocked ? Colors.amber.shade100 : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            "+${ach.points}",
-                            style: TextStyle(
-                                color: ach.isUnlocked ? Colors.amber.shade900 : Colors.grey.shade400,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 13
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isUnlocked ? primaryColor.withOpacity(0.1) : Colors.grey.shade100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                  isUnlocked ? Icons.emoji_events_rounded : Icons.lock_rounded,
+                                  color: isUnlocked ? primaryColor : Colors.grey.shade400,
+                                  size: 28
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(ach['title'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isUnlocked ? Colors.grey.shade900 : Colors.grey.shade500)),
+                                  const SizedBox(height: 4),
+                                  Text(ach['desc'], style: TextStyle(fontSize: 13, color: isUnlocked ? Colors.grey.shade600 : Colors.grey.shade400, height: 1.4)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isUnlocked ? Colors.amber.shade100 : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                "+${ach['points']}",
+                                style: TextStyle(
+                                    color: isUnlocked ? Colors.amber.shade900 : Colors.grey.shade400,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
+                      );
+                    }),
+                  ],
+                );
+              }
             ),
           ),
         ],
@@ -3379,8 +3410,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     const SizedBox(height: 16),
 
                     _buildSettingsGroup([
-                      _buildSettingsTile(icon: Icons.help_outline_rounded, title: "Help & FAQ", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DummyContentScreen(title: "Help & FAQ")))),
-                      _buildSettingsTile(icon: Icons.privacy_tip_outlined, title: "Privacy & Safety", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DummyContentScreen(title: "Privacy & Safety")))),
+                      _buildSettingsTile(icon: Icons.help_outline_rounded, title: "Help & FAQ", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FAQScreen()))),
+                      _buildSettingsTile(icon: Icons.privacy_tip_outlined, title: "Privacy & Safety", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()))),
                       _buildSettingsTile(icon: Icons.mail_outline_rounded, title: "Contact Lab Admin", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DummyContentScreen(title: "Contact Lab Admin")))),
                     ]),
                     const SizedBox(height: 24),
@@ -3393,7 +3424,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       _buildSettingsTile(icon: Icons.logout_rounded, title: "Logout", isDestructive: true, onTap: () async {
                         await FirebaseAuth.instance.signOut();
                         if (context.mounted) {
-                          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => WelcomeScreen()), (route) => false);
+                          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const WelcomeScreen()), (route) => false);
                         }
                       }),
                     ]),
@@ -3436,6 +3467,135 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+    );
+  }
+}
+
+/// ----------------------------------------------------------------------------
+/// FAQ SCREEN
+/// ----------------------------------------------------------------------------
+class FAQScreen extends StatelessWidget {
+  const FAQScreen({super.key});
+
+  final List<Map<String, String>> faqs = const [
+    {"q": "1. What is the IDEA Lab App?", "a": "The IDEA Lab app allows students to register, create projects, book machines, and access lab resources efficiently."},
+    {"q": "2. How do I get access to the app?", "a": "You must complete your profile and submit required documents. Access will be granted after admin approval."},
+    {"q": "3. Why is my profile under review?", "a": "Your profile is being verified by the admin. This ensures only authorized users can access the lab."},
+    {"q": "4. What should I do if my profile is rejected?", "a": "Please check your details and uploaded documents. You may contact the lab admin for further assistance."},
+    {"q": "5. How can I book a machine?", "a": "You must first register a project. After that, you can select a machine, choose a time slot, and confirm your booking."},
+    {"q": "6. Why can’t I select certain time slots?", "a": "Those time slots are already booked by other users or the machine may be under maintenance."},
+    {"q": "7. What happens if a machine is under maintenance?", "a": "The machine will not be available for booking and will be marked as “Under Maintenance” in the app."},
+    {"q": "8. How do I report an issue with a machine?", "a": "Go to the “Report Issue” section, select the machine, describe the issue, and submit."},
+    {"q": "9. What are IDEA Points?", "a": "IDEA Points are rewards earned for activities like creating projects, booking machines, and participating in lab activities."},
+    {"q": "10. How can I see my bookings?", "a": "You can view all your bookings in the “My Bookings” section."},
+    {"q": "11. Will I receive notifications?", "a": "Yes, you will receive notifications for approvals, events, machine updates, and announcements from the admin."},
+    {"q": "12. Who can I contact for help?", "a": "You can contact the IDEA Lab admin through the “Contact Lab Admin” section in the app."},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+    
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7FB),
+      body: Column(
+        children: [
+          const CustomTabHeader(title: "Help & FAQ", showBackButton: true, isMainTab: false),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: faqs.length,
+              itemBuilder: (context, index) {
+                return Card(
+                  color: Colors.white,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      iconColor: primaryColor,
+                      collapsedIconColor: Colors.grey.shade600,
+                      title: Text(faqs[index]['q']!, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey.shade800)),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                          child: Text(faqs[index]['a']!, style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.5)),
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ----------------------------------------------------------------------------
+/// PRIVACY POLICY SCREEN
+/// ----------------------------------------------------------------------------
+class PrivacyPolicyScreen extends StatelessWidget {
+  const PrivacyPolicyScreen({super.key});
+
+  final List<Map<String, String>> policies = const [
+    {"q": "1. Information We Collect", "a": "We collect the following user information:\n• Name\n• Email address\n• Phone number\n• College and department details\n• PRN number (if applicable)\n• Uploaded documents (ID card / Aadhaar)"},
+    {"q": "2. How We Use Your Information", "a": "Your data is used to:\n• Verify your identity\n• Provide access to the lab system\n• Manage bookings and projects\n• Send important notifications"},
+    {"q": "3. Data Security", "a": "We use secure cloud services to store your data. Your information is protected and not shared without authorization."},
+    {"q": "4. Data Sharing", "a": "We do not sell or share your personal data with third parties. Data is only accessible to authorized administrators."},
+    {"q": "5. User Control", "a": "You can update your profile information. For deletion or correction requests, contact the admin."},
+    {"q": "6. Notifications", "a": "We may send notifications related to:\n• Profile approval\n• Machine bookings\n• Events and updates"},
+    {"q": "7. Uploaded Documents", "a": "Documents such as ID cards are used only for verification and are stored securely."},
+    {"q": "8. Changes to Policy", "a": "The privacy policy may be updated. Users will be notified of major changes."},
+    {"q": "9. Contact Information", "a": "For any privacy concerns, contact: IDEA Lab Admin\nEmail: idealab@bvucoep.edu.in"},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+    
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7FB),
+      body: Column(
+        children: [
+          const CustomTabHeader(title: "Privacy & Safety", showBackButton: true, isMainTab: false),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: policies.length,
+              itemBuilder: (context, index) {
+                return Card(
+                  color: Colors.white,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      iconColor: primaryColor,
+                      collapsedIconColor: Colors.grey.shade600,
+                      initiallyExpanded: index == 0, // Auto-expand the first item
+                      title: Text(policies[index]['q']!, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey.shade800)),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(policies[index]['a']!, style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.5)),
+                          ),
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

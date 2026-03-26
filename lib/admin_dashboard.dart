@@ -4,6 +4,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'main.dart'; // Imports the global models from main.dart
 
+/// --- LOCAL NOTIFICATION HELPER FOR ADMIN DASHBOARD ---
+Future<void> sendNotification(String userId, String title, String message, String type) async {
+  await FirebaseFirestore.instance.collection('notifications').add({
+    'userId': userId, // Use "ALL" for global broadcasts
+    'title': title,
+    'message': message,
+    'type': type,
+    'timestamp': FieldValue.serverTimestamp(),
+    'isRead': false,
+  });
+}
+
 /// ============================================================================
 /// 💻 ADMIN DASHBOARD (WEB / PC ONLY)
 /// ============================================================================
@@ -304,7 +316,6 @@ class AdminUserApprovalsTab extends StatelessWidget {
       final data = doc.data() as Map<String, dynamic>? ?? {};
       Map<String, dynamic> achievements = data['achievements'] ?? {};
       
-      // FIX: Give 10 points and unblock Registration Achievement
       if (achievements['reg'] != true) {
         achievements['reg'] = true;
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
@@ -584,6 +595,10 @@ class AdminProjectsTab extends StatelessWidget {
               const SizedBox(height: 12),
               const Text("Team Members:", style: TextStyle(fontWeight: FontWeight.bold)),
               ...(data['teamMembers'] as List<dynamic>? ?? []).map((t) => Text(" • ${t['name']} (${t['id']})")),
+              if (data['imagePath'] != null && data['imagePath'].toString().startsWith('http')) ...[
+                const SizedBox(height: 16),
+                ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(data['imagePath'], height: 150, width: double.infinity, fit: BoxFit.cover)),
+              ]
             ],
           ),
         ),
@@ -673,6 +688,15 @@ class AdminMaintenanceTab extends StatelessWidget {
                         FirebaseFirestore.instance.collection('machines').doc(docs[index].id).update({
                           'status': val ? 'Under Maintenance' : 'Available'
                         });
+
+                        // --- NEW NOTIFICATION TRIGGER: MACHINE STATUS ---
+                        String newStatus = val ? 'Under Maintenance' : 'Available';
+                        sendNotification(
+                          "ALL", 
+                          "Machine Status Update", 
+                          "${data['name']} is now $newStatus.", 
+                          "machine"
+                        );
                       },
                     ),
                   ],
@@ -706,7 +730,7 @@ class AdminEventsTab extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: "Event Title")),
-              TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: "Date (e.g., Oct 15)")),
+              TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: "Date (e.g., 2024-10-15)")),
               TextField(controller: timeCtrl, decoration: const InputDecoration(labelText: "Time (e.g., 10:00 AM)")),
               TextField(controller: descCtrl, decoration: const InputDecoration(labelText: "Description"), maxLines: 3),
             ],
@@ -849,6 +873,16 @@ class AdminGrievancesTab extends StatelessWidget {
                           items: ['Pending', 'Processing', 'Completed'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                           onChanged: (val) {
                             FirebaseFirestore.instance.collection('issues').doc(docs[index].id).update({'status': val});
+                            
+                            // --- NEW NOTIFICATION TRIGGER: GRIEVANCE UPDATE ---
+                            if (val != 'Pending') {
+                              sendNotification(
+                                data['userId'], 
+                                "Grievance Update", 
+                                "Your issue regarding ${data['machineName']} is now marked as $val.", 
+                                "grievance"
+                              );
+                            }
                           },
                         ),
                       ),
@@ -915,89 +949,225 @@ class AdminLeaderboardTab extends StatelessWidget {
   }
 }
 
-/// --- ADMIN TAB: NOTIFICATIONS ---
-class AdminNotificationsTab extends StatefulWidget {
-  const AdminNotificationsTab({super.key});
-  @override
-  State<AdminNotificationsTab> createState() => _AdminNotificationsTabState();
-}
-class _AdminNotificationsTabState extends State<AdminNotificationsTab> {
-  final TextEditingController _titleCtrl = TextEditingController();
-  final TextEditingController _msgCtrl = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Send Push Notification", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 24),
-          TextField(
-            controller: _titleCtrl, 
-            decoration: const InputDecoration(labelText: "Notification Title", border: OutlineInputBorder())
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _msgCtrl, 
-            maxLines: 4, 
-            decoration: const InputDecoration(labelText: "Message Body", border: OutlineInputBorder())
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: 200, height: 50,
-            child: ElevatedButton(
-              onPressed: () {
-                if (_titleCtrl.text.isEmpty || _msgCtrl.text.isEmpty) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Simulated Push Sent: ${_titleCtrl.text}'), backgroundColor: Colors.green)
-                );
-                _titleCtrl.clear(); 
-                _msgCtrl.clear();
-              },
-              child: const Text("Send Notification", style: TextStyle(fontSize: 16)),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-}
-
 /// --- ADMIN TAB: ANALYTICS ---
 class AdminAnalyticsTab extends StatelessWidget {
   const AdminAnalyticsTab({super.key});
 
-  Future<void> _launchLooker() async {
-    final Uri url = Uri.parse('https://lookerstudio.google.com/');
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      debugPrint("Could not launch $url");
+  Future<Map<String, dynamic>> fetchAnalyticsData() async {
+    final usersSnap = await FirebaseFirestore.instance.collection('users').get();
+    final machinesSnap = await FirebaseFirestore.instance.collection('machines').get();
+    final bookingsSnap = await FirebaseFirestore.instance.collection('bookings').get();
+    final projectsSnap = await FirebaseFirestore.instance.collection('projects').get();
+    final issuesSnap = await FirebaseFirestore.instance.collection('issues').get();
+
+    // 1. User Analytics
+    int totalUsers = 0, pendingUsers = 0, approvedUsers = 0, rejectedUsers = 0;
+    Map<String, int> deptCounts = {};
+    for (var doc in usersSnap.docs) {
+      var data = doc.data();
+      if (data['role'] != 'admin') {
+        totalUsers++;
+        String status = data['status'] ?? 'pending_approval';
+        if (status == 'approved') approvedUsers++;
+        else if (status == 'rejected') rejectedUsers++;
+        else pendingUsers++;
+
+        String dept = data['department'] ?? 'Unknown';
+        deptCounts[dept] = (deptCounts[dept] ?? 0) + 1;
+      }
     }
+    String topDept = deptCounts.isNotEmpty ? (deptCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key : "N/A";
+
+    // 2. Machine Analytics
+    int totalMachines = machinesSnap.docs.length;
+    int availableMachines = 0, maintenanceMachines = 0;
+    for (var doc in machinesSnap.docs) {
+      if (doc.data()['status'] == 'Available') availableMachines++;
+      else maintenanceMachines++;
+    }
+
+    // 3. Booking Analytics
+    int totalBookings = bookingsSnap.docs.length;
+    Map<String, int> machineBookingCounts = {};
+    for (var doc in bookingsSnap.docs) {
+      String mName = doc.data()['machineName'] ?? 'Unknown';
+      machineBookingCounts[mName] = (machineBookingCounts[mName] ?? 0) + 1;
+    }
+    String mostBookedMachine = "N/A";
+    if (machineBookingCounts.isNotEmpty) {
+      var sorted = machineBookingCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      mostBookedMachine = "${sorted.first.key} (${sorted.first.value})";
+    }
+
+    // 4. Project Analytics
+    int totalProjects = projectsSnap.docs.length;
+    int ongoingProjects = 0, completedProjects = 0;
+    for (var doc in projectsSnap.docs) {
+      if (doc.data()['isOngoing'] == true) ongoingProjects++;
+      else completedProjects++;
+    }
+
+    // 5. Issue Analytics
+    int totalIssues = issuesSnap.docs.length;
+    int pendingIssues = 0, resolvedIssues = 0;
+    Map<String, int> issueMachineCounts = {};
+    for (var doc in issuesSnap.docs) {
+      var data = doc.data();
+      if (data['status'] == 'Completed') resolvedIssues++;
+      else pendingIssues++;
+
+      String mName = data['machineName'] ?? 'Unknown';
+      issueMachineCounts[mName] = (issueMachineCounts[mName] ?? 0) + 1;
+    }
+    String mostIssuesMachine = "N/A";
+    if (issueMachineCounts.isNotEmpty) {
+      var sorted = issueMachineCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      mostIssuesMachine = "${sorted.first.key} (${sorted.first.value})";
+    }
+
+    return {
+      'totalUsers': totalUsers, 'approvedUsers': approvedUsers, 'pendingUsers': pendingUsers, 'rejectedUsers': rejectedUsers, 'topDept': topDept,
+      'totalMachines': totalMachines, 'availableMachines': availableMachines, 'maintenanceMachines': maintenanceMachines,
+      'totalBookings': totalBookings, 'mostBookedMachine': mostBookedMachine,
+      'totalProjects': totalProjects, 'ongoingProjects': ongoingProjects, 'completedProjects': completedProjects,
+      'totalIssues': totalIssues, 'pendingIssues': pendingIssues, 'resolvedIssues': resolvedIssues, 'mostIssuesMachine': mostIssuesMachine,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return FutureBuilder<Map<String, dynamic>>(
+      future: fetchAnalyticsData(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return const Center(child: Text("Error loading analytics data."));
+        }
+
+        final data = snapshot.data!;
+
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Action Bar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Lab Analytics Overview", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      // Update this URL to your specific Looker Studio Link if desired!
+                      final Uri url = Uri.parse('https://lookerstudio.google.com/');
+                      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+                        debugPrint("Could not launch $url");
+                      }
+                    }, 
+                    icon: const Icon(Icons.open_in_new, size: 16), 
+                    label: const Text("Advanced Analytics (Looker)"),
+                  )
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              _buildSectionHeader("👤 User Analytics"),
+              Wrap(
+                spacing: 16, runSpacing: 16,
+                children: [
+                  _buildMetricCard("Total Students", data['totalUsers'].toString(), Icons.people, Colors.blue),
+                  _buildMetricCard("Approved", data['approvedUsers'].toString(), Icons.check_circle, Colors.green),
+                  _buildMetricCard("Pending", data['pendingUsers'].toString(), Icons.hourglass_empty, Colors.orange),
+                  _buildMetricCard("Top Department", data['topDept'], Icons.school, Colors.purple),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              _buildSectionHeader("⚙️ Machine & Booking Analytics"),
+              Wrap(
+                spacing: 16, runSpacing: 16,
+                children: [
+                  _buildMetricCard("Total Bookings", data['totalBookings'].toString(), Icons.event_available, Colors.teal),
+                  _buildMetricCard("Most Booked", data['mostBookedMachine'], Icons.star, Colors.amber.shade600),
+                  _buildMetricCard("Available Machines", data['availableMachines'].toString(), Icons.check, Colors.green),
+                  _buildMetricCard("In Maintenance", data['maintenanceMachines'].toString(), Icons.build, Colors.redAccent),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              _buildSectionHeader("🚀 Project Analytics"),
+              Wrap(
+                spacing: 16, runSpacing: 16,
+                children: [
+                  _buildMetricCard("Total Projects", data['totalProjects'].toString(), Icons.assignment, Colors.indigo),
+                  _buildMetricCard("Ongoing Projects", data['ongoingProjects'].toString(), Icons.autorenew, Colors.blue),
+                  _buildMetricCard("Completed Projects", data['completedProjects'].toString(), Icons.task_alt, Colors.green),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              _buildSectionHeader("⚠️ Issue & Maintenance Analytics"),
+              Wrap(
+                spacing: 16, runSpacing: 16,
+                children: [
+                  _buildMetricCard("Total Issues", data['totalIssues'].toString(), Icons.report_problem, Colors.orange),
+                  _buildMetricCard("Pending Issues", data['pendingIssues'].toString(), Icons.pending_actions, Colors.red),
+                  _buildMetricCard("Resolved Issues", data['resolvedIssues'].toString(), Icons.check_circle_outline, Colors.green),
+                  _buildMetricCard("Most Problematic", data['mostIssuesMachine'], Icons.warning, Colors.redAccent),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              _buildSectionHeader("🏢 Lab Usage (Hardware Dependencies)"),
+              Wrap(
+                spacing: 16, runSpacing: 16,
+                children: [
+                  _buildMetricCard("Total Lab Entries", "N/A", Icons.door_front_door, Colors.grey),
+                  _buildMetricCard("Avg Time Spent", "N/A", Icons.timer, Colors.grey),
+                  _buildMetricCard("Peak Usage Hour", "N/A", Icons.access_time_filled, Colors.grey),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 8.0),
+                child: Text("*Lab Usage metrics require integration with physical RFID/QR Turnstile hardware logs.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 12)),
+              ),
+              const SizedBox(height: 48),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.analytics, size: 100, color: Theme.of(context).primaryColor),
-          const SizedBox(height: 24),
-          const Text("Google Looker Studio Integration", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 20)),
+            ],
+          ),
           const SizedBox(height: 16),
-          const Text("Click below to open the advanced analytics dashboard in a new tab.", style: TextStyle(color: Colors.grey)),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: _launchLooker, 
-            icon: const Icon(Icons.open_in_new), 
-            label: const Text("Open Analytics Dashboard"),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20), 
-              textStyle: const TextStyle(fontSize: 18)
-            ),
-          )
+          Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.grey.shade900)),
+          const SizedBox(height: 4),
+          Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade500)),
         ],
       ),
     );

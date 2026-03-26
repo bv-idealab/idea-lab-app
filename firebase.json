@@ -3,16 +3,20 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "idealab-backend-985ef",
-          "appId": "1:338506223143:android:1179e7f4e21ec8500d4802",
+          "projectId": "idealab-001",
+          "appId": "1:94074972466:android:576b3f0344284e99b94f2b",
           "fileOutput": "android/app/google-services.json"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "idealab-backend-985ef",
+          "projectId": "idealab-001",
           "configurations": {
-            "android": "1:338506223143:android:1179e7f4e21ec8500d4802"
+            "android": "1:94074972466:android:576b3f0344284e99b94f2b",
+            "ios": "1:94074972466:ios:f01a41e9a77d8446b94f2b",
+            "macos": "1:94074972466:ios:f01a41e9a77d8446b94f2b",
+            "web": "1:94074972466:web:2661c380febc9cf2b94f2b",
+            "windows": "1:94074972466:web:b9db7c65974571fdb94f2b"
           }
         }
       }

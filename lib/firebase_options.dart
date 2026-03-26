@@ -41,50 +41,48 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCQsrWgBt24IF0OamMlYv8_gqsvF7_TPDQ',
-    appId: '1:338506223143:web:7c2a5b936e8fdb6f0d4802',
-    messagingSenderId: '338506223143',
-    projectId: 'idealab-backend-985ef',
-    authDomain: 'idealab-backend-985ef.firebaseapp.com',
-    storageBucket: 'idealab-backend-985ef.firebasestorage.app',
-    measurementId: 'G-ZL00KLXSXQ',
+    apiKey: 'AIzaSyAuavbVx5NDmicTuABwsPNBm-3vGH3ntOA',
+    appId: '1:94074972466:web:2661c380febc9cf2b94f2b',
+    messagingSenderId: '94074972466',
+    projectId: 'idealab-001',
+    authDomain: 'idealab-001.firebaseapp.com',
+    storageBucket: 'idealab-001.firebasestorage.app',
+    measurementId: 'G-012ZMQGFX8',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDx9c1hpIgZO729Qvi4sagJdBBiEKiyx_M',
-    appId: '1:338506223143:android:1179e7f4e21ec8500d4802',
-    messagingSenderId: '338506223143',
-    projectId: 'idealab-backend-985ef',
-    storageBucket: 'idealab-backend-985ef.firebasestorage.app',
+    apiKey: 'AIzaSyAmBnzJE_V89xd1as2avbVpQ9OB8Uukjeg',
+    appId: '1:94074972466:android:576b3f0344284e99b94f2b',
+    messagingSenderId: '94074972466',
+    projectId: 'idealab-001',
+    storageBucket: 'idealab-001.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCSItFs807WNkj_Hj-bZVxYGr8ZwdpUsao',
-    appId: '1:338506223143:ios:f9200a638ec70fbd0d4802',
-    messagingSenderId: '338506223143',
-    projectId: 'idealab-backend-985ef',
-    storageBucket: 'idealab-backend-985ef.firebasestorage.app',
-    iosClientId: '338506223143-bk8e2k86nrdi1246uv8rob3fhppmj218.apps.googleusercontent.com',
+    apiKey: 'AIzaSyBVpGHV-9-_u_B5F6xnMrk0fO8_lUq8ZFU',
+    appId: '1:94074972466:ios:f01a41e9a77d8446b94f2b',
+    messagingSenderId: '94074972466',
+    projectId: 'idealab-001',
+    storageBucket: 'idealab-001.firebasestorage.app',
     iosBundleId: 'com.example.untitled',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCSItFs807WNkj_Hj-bZVxYGr8ZwdpUsao',
-    appId: '1:338506223143:ios:f9200a638ec70fbd0d4802',
-    messagingSenderId: '338506223143',
-    projectId: 'idealab-backend-985ef',
-    storageBucket: 'idealab-backend-985ef.firebasestorage.app',
-    iosClientId: '338506223143-bk8e2k86nrdi1246uv8rob3fhppmj218.apps.googleusercontent.com',
+    apiKey: 'AIzaSyBVpGHV-9-_u_B5F6xnMrk0fO8_lUq8ZFU',
+    appId: '1:94074972466:ios:f01a41e9a77d8446b94f2b',
+    messagingSenderId: '94074972466',
+    projectId: 'idealab-001',
+    storageBucket: 'idealab-001.firebasestorage.app',
     iosBundleId: 'com.example.untitled',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyCQsrWgBt24IF0OamMlYv8_gqsvF7_TPDQ',
-    appId: '1:338506223143:web:4a432bd6d6e29efc0d4802',
-    messagingSenderId: '338506223143',
-    projectId: 'idealab-backend-985ef',
-    authDomain: 'idealab-backend-985ef.firebaseapp.com',
-    storageBucket: 'idealab-backend-985ef.firebasestorage.app',
-    measurementId: 'G-33TCKD663Z',
+    apiKey: 'AIzaSyAuavbVx5NDmicTuABwsPNBm-3vGH3ntOA',
+    appId: '1:94074972466:web:b9db7c65974571fdb94f2b',
+    messagingSenderId: '94074972466',
+    projectId: 'idealab-001',
+    authDomain: 'idealab-001.firebaseapp.com',
+    storageBucket: 'idealab-001.firebasestorage.app',
+    measurementId: 'G-ZCQYR7365P',
   );
 }
